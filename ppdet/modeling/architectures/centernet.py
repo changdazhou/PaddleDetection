@@ -66,6 +66,8 @@ class CenterNet(BaseArch):
         return {'backbone': backbone, 'neck': neck, "head": head}
 
     def _forward(self):
+        print(self.inputs)
+        print(self.inputs.keys())
         neck_feat = self.backbone(self.inputs)
         if self.neck is not None:
             neck_feat = self.neck(neck_feat)
