@@ -4,7 +4,7 @@ _BASE_: [
 
 # pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/MobileNetV3_large_x1_0_ssld_pretrained.pdparams
 # weights: output/centernet_mbv3_large_140e_coco/model_final
-
+pretrain_weights: null
 CenterNet:
   backbone: FasterNet
   neck: CenterNetDLAFPN
@@ -17,7 +17,7 @@ FasterNet:
   embed_dim: 40
   depths: [1, 2, 8, 2]
   drop_path: 0.0
-  act_layer: GELU
+  act_layer: ReLU
 
 # MobileNetV3:
 #   model_name: large

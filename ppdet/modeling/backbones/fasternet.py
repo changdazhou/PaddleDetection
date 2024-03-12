@@ -168,15 +168,15 @@ class FasterNet(nn.Layer):
             x.item() for x in paddle.linspace(0, drop_path, sum(depths))
         ]
 
-        self.feature = []
         ch_out_list = [64, 128, 256, 512]
 
         self._out_channels = [4 * v for v in ch_out_list]
         self._out_strides = [4, 8, 16, 32]
 
         embed_dim = embed_dim
+        self.layers = []
         for idx, depth in enumerate(depths):
-
+            self.feature = []
             self.feature.append(
                 nn.Sequential(* [
                     BasicBlock(
@@ -199,6 +199,8 @@ class FasterNet(nn.Layer):
                         act_layer()))
 
                 embed_dim = embed_dim * 2
+            self.layers.append(
+                self.add_sublayer(f'{depth}', nn.Sequential(*self.feature)))
 
         self.feature = nn.Sequential(*self.feature)
 
@@ -216,16 +218,25 @@ class FasterNet(nn.Layer):
             for i in self.return_idx
         ]
 
-    def forward(self, x):
+    def forward(self, inputs):
+        x = inputs['image']
         x = self.stem(x)
-        x = self.feature(x)
+        # x = self.feature(x)
+        print(len(self.layers))
+        # exit()
+        outs = []
+        for idx, stage in enumerate(self.layers):
+            x = stage(x)
+            if idx in self.return_idx:
+                outs.append(x)
+        return outs
 
-        x = self.avg_pool(x)
-        x = self.conv1(x)
-        x = self.act_layer(x)
-        x = self.fc(x.flatten(1))
+        # x = self.avg_pool(x)
+        # x = self.conv1(x)
+        # x = self.act_layer(x)
+        # x = self.fc(x.flatten(1))
 
-        return x
+        # return x
 
 
 def fasternet_t0():
