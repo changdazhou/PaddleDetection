@@ -194,8 +194,6 @@ class DLAUp(nn.Layer):
             ch_in[j + 1:] = [channels[j] for _ in channels[j + 1:]]
 
     def forward(self, inputs):
-        print(inputs)
-        print(len(inputs))
         out = [inputs[-1]]  # start with 32
         for i in range(len(inputs) - self.start_level - 1):
             ida = getattr(self, 'ida_{}'.format(i))

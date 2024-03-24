@@ -158,10 +158,10 @@ class FasterNet(nn.Layer):
             act_layer())
         if isinstance(return_idx, Integral):
             return_idx = [return_idx]
-        assert max(return_idx) < 4, \
-            'the maximum return index must smaller than num_stages, ' \
-            'but received maximum return index is {} and num_stages ' \
-            'is {}'.format(max(return_idx), 4)
+        # assert max(return_idx) < 4, \
+        #     'the maximum return index must smaller than num_stages, ' \
+        #     'but received maximum return index is {} and num_stages ' \
+        #     'is {}'.format(max(return_idx), 4)
         self.return_idx = return_idx
 
         drop_path_list = [
@@ -170,13 +170,13 @@ class FasterNet(nn.Layer):
 
         ch_out_list = [64, 128, 256, 512]
 
-        self._out_channels = [4 * v for v in ch_out_list]
+        self._out_channels = [2 * v for v in ch_out_list]
         self._out_strides = [4, 8, 16, 32]
 
+        self.feature = []
         embed_dim = embed_dim
-        self.layers = []
         for idx, depth in enumerate(depths):
-            self.feature = []
+
             self.feature.append(
                 nn.Sequential(* [
                     BasicBlock(
@@ -199,10 +199,39 @@ class FasterNet(nn.Layer):
                         act_layer()))
 
                 embed_dim = embed_dim * 2
-            self.layers.append(
-                self.add_sublayer(f'{depth}', nn.Sequential(*self.feature)))
 
         self.feature = nn.Sequential(*self.feature)
+
+        # embed_dim = embed_dim
+        # self.layers = []
+        # for idx, depth in enumerate(depths):
+        #     self.feature = []
+        #     self.feature.append(
+        #         nn.Sequential(* [
+        #             BasicBlock(
+        #                 embed_dim,
+        #                 act_layer=act_layer,
+        #                 drop_path_rate=drop_path_list[sum(depths[:idx]) + i])
+        #             for i in range(depth)
+        #         ]))
+
+        #     if idx < len(depths) - 1:
+        #         self.feature.append(
+        #             nn.Sequential(
+        #                 nn.Conv2D(
+        #                     embed_dim,
+        #                     embed_dim * 2,
+        #                     2,
+        #                     stride=2,
+        #                     bias_attr=False),
+        #                 nn.BatchNorm2D(embed_dim * 2),
+        #                 act_layer()))
+
+        #         embed_dim = embed_dim * 2
+        #     self.layers.append(
+        #         self.add_sublayer(f'{depth}', nn.Sequential(*self.feature)))
+
+        # self.feature = nn.Sequential(*self.feature)
 
         self.avg_pool = nn.AdaptiveAvgPool2D(1)
 
@@ -215,17 +244,16 @@ class FasterNet(nn.Layer):
         return [
             ShapeSpec(
                 channels=self._out_channels[i], stride=self._out_strides[i])
-            for i in self.return_idx
+            for i in range(4)
         ]
 
     def forward(self, inputs):
         x = inputs['image']
         x = self.stem(x)
         # x = self.feature(x)
-        print(len(self.layers))
         # exit()
         outs = []
-        for idx, stage in enumerate(self.layers):
+        for idx, stage in enumerate(self.feature):
             x = stage(x)
             if idx in self.return_idx:
                 outs.append(x)

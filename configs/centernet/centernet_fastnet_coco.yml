@@ -12,12 +12,18 @@ CenterNet:
   post_process: CenterNetPostProcess
 
 FasterNet:
-  return_idx: [0, 1, 2, 3]
+  return_idx: [0, 2, 4, 6]
   num_classes: 10
-  embed_dim: 40
+  embed_dim: 128
   depths: [1, 2, 8, 2]
   drop_path: 0.0
   act_layer: ReLU
+
+CenterNetDLAFPN:
+  first_level: 0
+  last_level: 4
+  down_ratio: 4
+  dcn_v2: False
 
 # MobileNetV3:
 #   model_name: large
