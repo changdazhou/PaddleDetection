@@ -168,9 +168,7 @@ class FasterNet(nn.Layer):
             x.item() for x in paddle.linspace(0, drop_path, sum(depths))
         ]
 
-        ch_out_list = [64, 128, 256, 512]
-
-        self._out_channels = [2 * v for v in ch_out_list]
+        self._out_channels = [128, 256, 512, 1024]
         self._out_strides = [4, 8, 16, 32]
 
         self.feature = []
