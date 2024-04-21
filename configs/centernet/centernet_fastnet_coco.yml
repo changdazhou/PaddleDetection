@@ -24,12 +24,19 @@ CenterNetDLAFPN:
   down_ratio: 4
   dcn_v2: False
 
-# MobileNetV3:
-#   model_name: large
-#   scale: 1.
-#   with_extra_blocks: false
-#   extra_block_filters: []
-#   feature_maps: [4, 7, 13, 16]
+LearningRate:
+    base_lr: 0.0012
+    schedulers:
+    - !PiecewiseDecay
+      gamma: 0.1
+      milestones: [90, 120]
+      use_warmup: False
+
+OptimizerBuilder:
+    optimizer:
+      type: AdamW
+      weight_decay: 0.0001
+    regularizer: NULL
 
 TrainReader:
   batch_size: 32
