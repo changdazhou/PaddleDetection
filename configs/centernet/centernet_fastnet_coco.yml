@@ -25,7 +25,7 @@ CenterNetDLAFPN:
   dcn_v2: False
 
 LearningRate:
-    base_lr: 0.0012
+    base_lr: 0.002
     schedulers:
     - !PiecewiseDecay
       gamma: 0.1
@@ -39,4 +39,4 @@ OptimizerBuilder:
     regularizer: NULL
 
 TrainReader:
-  batch_size: 32
+  batch_size: 64
