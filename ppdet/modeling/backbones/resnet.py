@@ -579,8 +579,6 @@ class ResNet(nn.Layer):
         x = inputs['image']
         conv1 = self.conv1(x)
         x = F.max_pool2d(conv1, kernel_size=3, stride=2, padding=1)
-        print(len(self.res_layers))
-        exit()
         outs = []
         for idx, stage in enumerate(self.res_layers):
             x = stage(x)

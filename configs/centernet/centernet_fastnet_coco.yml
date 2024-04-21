@@ -12,9 +12,8 @@ CenterNet:
   post_process: CenterNetPostProcess
 
 FasterNet:
-  return_idx: [0, 2, 4, 6]
-  num_classes: 10
-  embed_dim: 128
+  return_idx: [0, 1, 2, 3]
+  embed_dim: 64
   depths: [1, 2, 8, 2]
   drop_path: 0.0
   act_layer: ReLU

@@ -11,37 +11,31 @@ __all__ = ['FasterNet']
 
 MODEL_cfg = {
     'fasternet_t0': dict(
-        num_classes=10,
         embed_dim=40,
         depths=[1, 2, 8, 2],
         drop_path_rate=0.0,
         act_layer=nn.GELU),
     'fasternet_t1': dict(
-        num_classes=10,
         embed_dim=64,
         depths=[1, 2, 8, 2],
         drop_path_rate=0.02,
         act_layer=nn.GELU),
     'fasternet_t2': dict(
-        num_classes=10,
         embed_dim=96,
         depths=[1, 2, 8, 2],
         drop_path_rate=0.05,
         act_layer=nn.ReLU),
     'fasternet_s': dict(
-        num_classes=10,
         embed_dim=40,
         depths=[1, 2, 8, 2],
         drop_path_rate=0.0,
         act_layer=nn.GELU),
     'fasternet_m': dict(
-        num_classes=10,
         embed_dim=40,
         depths=[1, 2, 8, 2],
         drop_path_rate=0.0,
         act_layer=nn.GELU),
     'fasternet_l': dict(
-        num_classes=10,
         embed_dim=40,
         depths=[1, 2, 8, 2],
         drop_path_rate=0.0,
@@ -141,7 +135,6 @@ class FasterNet(nn.Layer):
                  in_channel=3,
                  embed_dim=40,
                  act_layer=nn.ReLU,
-                 num_classes=1000,
                  depths=[1, 2, 8, 2],
                  drop_path=0.0):
         super().__init__()
@@ -156,26 +149,20 @@ class FasterNet(nn.Layer):
                 in_channel, embed_dim, 4, stride=4, bias_attr=False),
             nn.BatchNorm2D(embed_dim),
             act_layer())
-        if isinstance(return_idx, Integral):
-            return_idx = [return_idx]
-        # assert max(return_idx) < 4, \
-        #     'the maximum return index must smaller than num_stages, ' \
-        #     'but received maximum return index is {} and num_stages ' \
-        #     'is {}'.format(max(return_idx), 4)
+        if isinstance(return_idx, list):
+            return_idx = [(x * 2) for x in return_idx]
         self.return_idx = return_idx
 
         drop_path_list = [
             x.item() for x in paddle.linspace(0, drop_path, sum(depths))
         ]
 
-        self._out_channels = [128, 256, 512, 1024]
-        self._out_strides = [4, 8, 16, 32]
+        self._out_channels = [ x * embed_dim for x in [1, 2, 4, 8]]
 
-        self.feature = []
+        self.features = []
         embed_dim = embed_dim
         for idx, depth in enumerate(depths):
-
-            self.feature.append(
+            self.features.append(
                 nn.Sequential(* [
                     BasicBlock(
                         embed_dim,
@@ -185,7 +172,7 @@ class FasterNet(nn.Layer):
                 ]))
 
             if idx < len(depths) - 1:
-                self.feature.append(
+                self.features.append(
                     nn.Sequential(
                         nn.Conv2D(
                             embed_dim,
@@ -197,90 +184,47 @@ class FasterNet(nn.Layer):
                         act_layer()))
 
                 embed_dim = embed_dim * 2
-
-        self.feature = nn.Sequential(*self.feature)
-
-        # embed_dim = embed_dim
-        # self.layers = []
-        # for idx, depth in enumerate(depths):
-        #     self.feature = []
-        #     self.feature.append(
-        #         nn.Sequential(* [
-        #             BasicBlock(
-        #                 embed_dim,
-        #                 act_layer=act_layer,
-        #                 drop_path_rate=drop_path_list[sum(depths[:idx]) + i])
-        #             for i in range(depth)
-        #         ]))
-
-        #     if idx < len(depths) - 1:
-        #         self.feature.append(
-        #             nn.Sequential(
-        #                 nn.Conv2D(
-        #                     embed_dim,
-        #                     embed_dim * 2,
-        #                     2,
-        #                     stride=2,
-        #                     bias_attr=False),
-        #                 nn.BatchNorm2D(embed_dim * 2),
-        #                 act_layer()))
-
-        #         embed_dim = embed_dim * 2
-        #     self.layers.append(
-        #         self.add_sublayer(f'{depth}', nn.Sequential(*self.feature)))
-
-        # self.feature = nn.Sequential(*self.feature)
-
-        self.avg_pool = nn.AdaptiveAvgPool2D(1)
-
-        self.conv1 = nn.Conv2D(embed_dim, 1280, 1, bias_attr=False)
-        self.act_layer = act_layer()
-        self.fc = nn.Linear(1280, num_classes)
+                
+        self.features = nn.Sequential(*self.features)
 
     @property
     def out_shape(self):
         return [
             ShapeSpec(
-                channels=self._out_channels[i], stride=self._out_strides[i])
-            for i in range(4)
+                channels=self._out_channels[i])
+            for i in range(len(self._out_channels))
         ]
 
     def forward(self, inputs):
         x = inputs['image']
         x = self.stem(x)
-        # x = self.feature(x)
-        # exit()
         outs = []
-        for idx, stage in enumerate(self.feature):
+        for idx, stage in enumerate(self.features):
             x = stage(x)
             if idx in self.return_idx:
                 outs.append(x)
         return outs
 
-        # x = self.avg_pool(x)
-        # x = self.conv1(x)
-        # x = self.act_layer(x)
-        # x = self.fc(x.flatten(1))
+def FasterNet_t0():
+    return FasterNet(MODEL_cfg['fasternet_t0'])
 
-        # return x
+def FasterNet_t1():
+    return FasterNet(MODEL_cfg['fasternet_t1'])
 
+def FasterNet_t2():
+    return FasterNet(MODEL_cfg['fasternet_t2'])
 
-def fasternet_t0():
-    num_classes = 10
-    embed_dim = 40
-    depths = [1, 2, 8, 2]
-    drop_path_rate = 0.0
-    act_layer = nn.GELU
-    return FasterNet(
-        embed_dim=embed_dim,
-        act_layer=act_layer,
-        num_classes=num_classes,
-        depths=depths,
-        drop_path=drop_path_rate)
+def FasterNet_s():
+    return FasterNet(MODEL_cfg['fasternet_s'])
 
+def FasterNet_m():
+    return FasterNet(MODEL_cfg['fasternet_m'])
+
+def FasterNet_l():
+    return FasterNet(MODEL_cfg['fasternet_l'])
 
 if __name__ == '__main__':
     import paddle
     paddle.set_device('gpu')
-    model = fasternet_t0()
+    model = FasterNet_t0()
     paddle.summary(model, (1, 3, 224, 224))
