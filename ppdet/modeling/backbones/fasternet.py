@@ -73,7 +73,7 @@ class DropPath(nn.Layer):
 
 class PConv(nn.Layer):
     def __init__(self, dim, kernel_size=3, n_div=4):
-        super(PConv, self).__init__()
+        super().__init__()
 
         self.dim_conv = dim // n_div
         self.dim_untouched = dim - self.dim_conv
@@ -94,13 +94,13 @@ class PConv(nn.Layer):
         return x
 
 
-class BasicBlock(nn.Layer):
+class FasterNetBlock(nn.Layer):
     def __init__(self,
                  dim,
                  expand_ratio=2,
                  act_layer=nn.ReLU,
                  drop_path_rate=0.0):
-        super(BasicBlock, self).__init__()
+        super().__init__()
 
         self.pconv = PConv(dim)
 
@@ -134,11 +134,11 @@ class FasterNet(nn.Layer):
                  return_idx=[0, 1, 2, 3],
                  in_channel=3,
                  embed_dim=40,
-                 act_layer=nn.ReLU,
+                 act_layer='GELU',
                  depths=[1, 2, 8, 2],
                  drop_path=0.0):
         super().__init__()
-
+        
         if act_layer == 'GELU':
             act_layer = nn.GELU
         else:
@@ -149,6 +149,17 @@ class FasterNet(nn.Layer):
                 in_channel, embed_dim, 4, stride=4, bias_attr=False),
             nn.BatchNorm2D(embed_dim),
             act_layer())
+
+        self.stem = nn.Sequential(
+            nn.Conv2D(
+                in_channel,
+                embed_dim,
+                kernel_size=4,
+                stride=4,
+                bias_attr=False),
+            nn.BatchNorm2D(embed_dim),
+            act_layer())
+        
         if isinstance(return_idx, list):
             return_idx = [(x * 2) for x in return_idx]
         self.return_idx = return_idx
@@ -156,15 +167,16 @@ class FasterNet(nn.Layer):
         drop_path_list = [
             x.item() for x in paddle.linspace(0, drop_path, sum(depths))
         ]
-
+        
         self._out_channels = [ x * embed_dim for x in [1, 2, 4, 8]]
 
-        self.features = []
+        self.feature = []
         embed_dim = embed_dim
         for idx, depth in enumerate(depths):
-            self.features.append(
+
+            self.feature.append(
                 nn.Sequential(* [
-                    BasicBlock(
+                    FasterNetBlock(
                         embed_dim,
                         act_layer=act_layer,
                         drop_path_rate=drop_path_list[sum(depths[:idx]) + i])
@@ -172,21 +184,22 @@ class FasterNet(nn.Layer):
                 ]))
 
             if idx < len(depths) - 1:
-                self.features.append(
+                self.feature.append(
                     nn.Sequential(
                         nn.Conv2D(
                             embed_dim,
                             embed_dim * 2,
-                            2,
+                            kernel_size=2,
                             stride=2,
                             bias_attr=False),
                         nn.BatchNorm2D(embed_dim * 2),
-                        act_layer()))
+                        nn.ReLU()))
 
                 embed_dim = embed_dim * 2
-                
-        self.features = nn.Sequential(*self.features)
 
+        self.feature = nn.Sequential(*self.feature)
+
+        
     @property
     def out_shape(self):
         return [
@@ -199,7 +212,7 @@ class FasterNet(nn.Layer):
         x = inputs['image']
         x = self.stem(x)
         outs = []
-        for idx, stage in enumerate(self.features):
+        for idx, stage in enumerate(self.feature):
             x = stage(x)
             if idx in self.return_idx:
                 outs.append(x)
