@@ -102,8 +102,6 @@ class FasterNetBlock(nn.Layer):
                  drop_path_rate=0.0):
         super().__init__()
 
-        self.pconv = PConv(dim)
-
         self.conv1 = nn.Conv2D(dim, dim * expand_ratio, 1, bias_attr=False)
 
         self.bn = nn.BatchNorm2D(dim * expand_ratio)
@@ -113,6 +111,8 @@ class FasterNetBlock(nn.Layer):
 
         self.drop_path = DropPath(
             drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        
+        self.pconv = PConv(dim)
 
     def forward(self, x):
         residual = x
