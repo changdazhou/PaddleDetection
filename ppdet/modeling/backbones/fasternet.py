@@ -62,7 +62,7 @@ class DropPath(nn.Layer):
     """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
     """
 
-    def __init__(self, training=True, drop_prob=None):
+    def __init__(self, drop_prob=None,training=True):
         super(DropPath, self).__init__()
         self.drop_prob = drop_prob
         self.training = training
