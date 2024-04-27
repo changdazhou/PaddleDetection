@@ -169,6 +169,8 @@ class FasterNet(nn.Layer):
         ]
         
         self._out_channels = [ x * embed_dim for x in [1, 2, 4, 8]]
+        
+        self._out_strides = [4, 8, 16, 32]
 
         self.feature = []
         embed_dim = embed_dim
@@ -204,7 +206,7 @@ class FasterNet(nn.Layer):
     def out_shape(self):
         return [
             ShapeSpec(
-                channels=self._out_channels[i])
+                channels=self._out_channels[i],stride=self._out_strides[i])
             for i in range(len(self._out_channels))
         ]
 

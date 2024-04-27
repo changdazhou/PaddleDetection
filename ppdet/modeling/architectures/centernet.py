@@ -71,6 +71,8 @@ class CenterNet(BaseArch):
             neck_feat = self.neck(neck_feat)
             if isinstance(neck_feat, list):
                 neck_feat = neck_feat[0]
+            if isinstance(neck_feat, tuple):
+                neck_feat = neck_feat[0]
         head_out = self.head(neck_feat, self.inputs)
         if self.for_mot:
             head_out.update({'neck_feat': neck_feat})

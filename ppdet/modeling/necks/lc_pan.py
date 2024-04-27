@@ -165,4 +165,7 @@ class LCPAN(nn.Layer):
 
     @classmethod
     def from_config(cls, cfg, input_shape):
-        return {'in_channels': [i.channels for i in input_shape], }
+        return {
+            'in_channels': [i.channels for i in input_shape],
+            'spatial_scales': [1.0 / i.stride for i in input_shape],
+        }

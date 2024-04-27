@@ -1,0 +1,60 @@
+_BASE_: [
+  'centernet_r50_140e_coco.yml'
+]
+
+# pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/MobileNetV3_large_x1_0_ssld_pretrained.pdparams
+# weights: output/centernet_mbv3_large_140e_coco/model_final
+pretrain_weights: /paddle/zcd/PaddleClas/convert_pdparams/fasternet_t1_76.2180.pdparams
+CenterNet:
+  backbone: FasterNet
+  neck: LCPAN
+  head: CenterNetHead
+  post_process: CenterNetPostProcess
+
+FasterNet:
+  return_idx: [0, 1, 2, 3]
+  embed_dim: 64
+  depths: [1, 2, 8, 2]
+  drop_path: 0.02
+  act_layer: GELU
+
+LCPAN:
+  out_channels: 64
+# CustomCSPPAN:
+#   out_channels: [512,256,128,64]
+
+# CenterNetDLAFPN:
+#   first_level: 0
+#   last_level: 4
+#   down_ratio: 4
+#   dcn_v2: False
+
+# MobileNetV3:
+#   model_name: large
+#   scale: 1.
+#   with_extra_blocks: false
+#   extra_block_filters: []
+#   feature_maps: [4, 7, 13, 16]
+LearningRate:
+    base_lr: 0.002
+    schedulers:
+    - !PiecewiseDecay
+      gamma: 0.1
+      milestones: [90, 120]
+      use_warmup: False
+
+OptimizerBuilder:
+    optimizer:
+      type: AdamW
+      weight_decay: 0.0001
+    regularizer: NULL
+
+CenterNetHead:
+  head_planes: 256
+  regress_ltrb: False
+  # size_loss: giou
+
+
+
+TrainReader:
+  batch_size: 32
