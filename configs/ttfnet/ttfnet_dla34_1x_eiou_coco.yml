@@ -11,8 +11,6 @@ TTFHead:
     name: CTFocalLoss
     loss_weight: 1.
   wh_loss: EIouLoss
-    # name: DIoULoss
-    # loss_weight: 5.
 
 EIouLoss:
   loss_weight: 5.0
