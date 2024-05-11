@@ -10,8 +10,9 @@ TTFHead:
   hm_loss:
     name: CTFocalLoss
     loss_weight: 1.
-  wh_loss:
-    name: DIoULoss
-    loss_weight: 5.
+  wh_loss: DIoULoss
+
+DIoULoss
+  loss_weight: 5.0
 
 weights: output/ttfnet_dla34_1x_coco/model_final
