@@ -1,0 +1,34 @@
+architecture: TTFNet
+pretrain_weights: https://bj.bcebos.com/v1/paddledet/models/pretrained/DLA34_pretrain.pdparams
+
+TTFNet:
+  backbone: DLA
+  neck: TTFFPN
+  ttf_head: TTFHead
+  post_process: BBoxPostProcess
+
+DLA:
+  depth: 34
+
+CenterNetDLAFPN:
+  down_ratio: 4
+
+TTFFPN:
+  planes: [256, 128, 64]
+  shortcut_num: [3, 2, 1]
+
+TTFHead:
+  hm_loss:
+    name: CTFocalLoss
+    loss_weight: 1.
+  wh_loss:
+    name: GIoULoss
+    loss_weight: 5.
+    reduction: sum
+
+BBoxPostProcess:
+  decode:
+    name: TTFBox
+    max_per_img: 100
+    score_thresh: 0.01
+    down_ratio: 4
