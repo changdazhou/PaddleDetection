@@ -23,7 +23,7 @@ import paddle
 from ppdet.core.workspace import register, serializable
 from ..bbox_utils import bbox_iou
 
-__all__ = ['IouLoss', 'GIoULoss', 'DIouLoss', 'SIoULoss']
+__all__ = ['IouLoss', 'GIoULoss', 'DIouLoss', 'EIouLoss', 'SIoULoss']
 
 
 @register
@@ -208,6 +208,72 @@ class DIouLoss(GIoULoss):
         diou = paddle.mean((1 - iouk + ciou_term + diou_term) * iou_weight)
 
         return diou * self.loss_weight
+    
+
+@register
+@serializable
+class EIouLoss(GIoULoss):
+    """
+    Distance-IoU Loss, see https://arxiv.org/abs/1911.08287
+    Args:
+        loss_weight (float): giou loss weight, default as 1
+        eps (float): epsilon to avoid divide by zero, default as 1e-10
+    """
+
+    def __init__(self, loss_weight=1., eps=1e-10):
+        super(EIouLoss, self).__init__(loss_weight=loss_weight, eps=eps)
+
+    def __call__(self, pbox, gbox, iou_weight=1.):
+        x1, y1, x2, y2 = paddle.split(pbox, num_or_sections=4, axis=-1)
+        x1g, y1g, x2g, y2g = paddle.split(gbox, num_or_sections=4, axis=-1)
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2        
+        w = x2 - x1
+        h = y2 - y1
+
+        cxg = (x1g + x2g) / 2
+        cyg = (y1g + y2g) / 2
+        wg = x2g - x1g
+        hg = y2g - y1g
+
+        x2 = paddle.maximum(x1, x2)
+        y2 = paddle.maximum(y1, y2)
+
+        # A and B
+        xkis1 = paddle.maximum(x1, x1g)
+        ykis1 = paddle.maximum(y1, y1g)
+        xkis2 = paddle.minimum(x2, x2g)
+        ykis2 = paddle.minimum(y2, y2g)
+
+        # A or B
+        xc1 = paddle.minimum(x1, x1g)
+        yc1 = paddle.minimum(y1, y1g)
+        xc2 = paddle.maximum(x2, x2g)
+        yc2 = paddle.maximum(y2, y2g)
+
+        intsctk = (xkis2 - xkis1) * (ykis2 - ykis1)
+        intsctk = intsctk * paddle.greater_than(
+            xkis2, xkis1).astype(intsctk.dtype) * paddle.greater_than(ykis2, ykis1).astype(intsctk.dtype)
+        unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g
+                                                        ) - intsctk + self.eps
+        iouk = intsctk / unionk
+
+        # DIOU term
+        dist_intersection = (cx - cxg) * (cx - cxg) + (cy - cyg) * (cy - cyg)
+        dist_union = (xc2 - xc1) * (xc2 - xc1) + (yc2 - yc1) * (yc2 - yc1)
+        diou_term = (dist_intersection + self.eps) / (dist_union + self.eps)
+
+        # EIOU term
+        c2_w = (xc2 - xc1) * (xc2 - xc1) + self.eps
+        c2_h = (yc2 - yc1) * (yc2 - yc1) + self.eps
+        rho2_w = (w - wg) * (w - wg)
+        rho2_h = (h - hg) * (h - hg)
+        eiou_term = (rho2_w / c2_w) + (rho2_h / c2_h)        
+
+
+        eiou = paddle.mean((1 - iouk + eiou_term + diou_term) * iou_weight)
+
+        return eiou * self.loss_weight
 
 
 @register

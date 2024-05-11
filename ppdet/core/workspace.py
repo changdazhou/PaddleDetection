@@ -116,6 +116,7 @@ def load_config(file_path):
 
     Returns: global config
     """
+    global global_config
     _, ext = os.path.splitext(file_path)
     assert ext in ['.yml', '.yaml'], "only support yaml files for now"
 

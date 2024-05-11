@@ -1,0 +1,21 @@
+_BASE_: [
+  '../datasets/coco_detection.yml',
+  '../runtime.yml',
+  '_base_/optimizer_1x.yml',
+  '_base_/ttfnet_dla34.yml',
+  '_base_/ttfnet_reader.yml',
+]
+
+TTFHead:
+  hm_loss:
+    name: CTFocalLoss
+    loss_weight: 1.
+  wh_loss: EIouLoss
+    # name: DIoULoss
+    # loss_weight: 5.
+
+EIouLoss:
+  loss_weight: 5.0
+
+
+weights: output/ttfnet_dla34_1x_coco/model_final

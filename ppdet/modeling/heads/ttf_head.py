@@ -300,11 +300,17 @@ class TTFHead(nn.Layer):
         pred_boxes, boxes, mask = self.filter_box_by_weight(pred_boxes, boxes,
                                                             mask)
         mask.stop_gradient = True
-        wh_loss = self.wh_loss(
-            pred_boxes,
-            boxes,
-            iou_weight=mask.unsqueeze(1),
-            loc_reweight=pred_hm_max_softmax)
+        if self.wh_loss.__class__.__name__ == 'GIoULoss':
+            wh_loss = self.wh_loss(
+                pred_boxes,
+                boxes,
+                iou_weight=mask.unsqueeze(1),
+                loc_reweight=pred_hm_max_softmax)
+        else:
+            wh_loss = self.wh_loss(
+                pred_boxes,
+                boxes,
+                iou_weight=mask.unsqueeze(1))
         wh_loss = wh_loss / avg_factor
 
         ttf_loss = {'hm_loss': hm_loss, 'wh_loss': wh_loss}

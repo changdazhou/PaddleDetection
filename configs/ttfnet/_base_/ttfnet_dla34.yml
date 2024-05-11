@@ -3,7 +3,7 @@ pretrain_weights: https://bj.bcebos.com/v1/paddledet/models/pretrained/DLA34_pre
 
 TTFNet:
   backbone: DLA
-  neck: TTFFPN
+  neck: CenterNetDLAFPN
   ttf_head: TTFHead
   post_process: BBoxPostProcess
 
