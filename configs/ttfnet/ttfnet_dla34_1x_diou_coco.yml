@@ -14,5 +14,7 @@ TTFHead:
 
 DIouLoss:
   loss_weight: 5.0
+  use_complete_iou_loss: False
+  reduction: sum
 
 weights: output/ttfnet_dla34_1x_coco/model_final

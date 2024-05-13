@@ -150,9 +150,11 @@ class DIouLoss(GIoULoss):
         use_complete_iou_loss (bool): whether to use complete iou loss
     """
 
-    def __init__(self, loss_weight=1., eps=1e-10, use_complete_iou_loss=True):
+    def __init__(self, loss_weight=1., eps=1e-10, use_complete_iou_loss=True,reduction='none'):
         super(DIouLoss, self).__init__(loss_weight=loss_weight, eps=eps)
+        assert reduction in ('none', 'mean', 'sum')
         self.use_complete_iou_loss = use_complete_iou_loss
+        self.reduction = reduction
 
     def __call__(self, pbox, gbox, iou_weight=1.):
         x1, y1, x2, y2 = paddle.split(pbox, num_or_sections=4, axis=-1)
@@ -205,9 +207,15 @@ class DIouLoss(GIoULoss):
             alpha.stop_gradient = True
             ciou_term = alpha * ar_loss
 
-        diou = paddle.mean((1 - iouk + ciou_term + diou_term) * iou_weight)
+        diou = 1 - iouk + ciou_term + diou_term
+        if self.reduction == 'none':
+            loss = diou
+        elif self.reduction == 'sum':
+            loss = paddle.sum(diou * iou_weight)
+        else:
+            loss = paddle.mean(diou * iou_weight)
 
-        return diou * self.loss_weight
+        return loss * self.loss_weight
     
 
 @register
@@ -220,8 +228,10 @@ class EIouLoss(GIoULoss):
         eps (float): epsilon to avoid divide by zero, default as 1e-10
     """
 
-    def __init__(self, loss_weight=1., eps=1e-10):
+    def __init__(self, loss_weight=1., eps=1e-10,reduction='none'):
         super(EIouLoss, self).__init__(loss_weight=loss_weight, eps=eps)
+        assert reduction in ('none', 'mean', 'sum')
+        self.reduction = reduction
 
     def __call__(self, pbox, gbox, iou_weight=1.):
         x1, y1, x2, y2 = paddle.split(pbox, num_or_sections=4, axis=-1)
@@ -270,10 +280,15 @@ class EIouLoss(GIoULoss):
         rho2_h = (h - hg) * (h - hg)
         eiou_term = (rho2_w / c2_w) + (rho2_h / c2_h)        
 
+        eiou = 1 - iouk + eiou_term + diou_term
+        if self.reduction == 'none':
+            loss = eiou
+        elif self.reduction == 'sum':
+            loss = paddle.sum(eiou * iou_weight)
+        else:
+            loss = paddle.mean(eiou * iou_weight)
 
-        eiou = paddle.mean((1 - iouk + eiou_term + diou_term) * iou_weight)
-
-        return eiou * self.loss_weight
+        return loss * self.loss_weight
 
 
 @register
