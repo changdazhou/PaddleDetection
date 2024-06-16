@@ -41,9 +41,9 @@ from .callbacks import Callback, ComposeCallback
 from ppdet.utils.logger import setup_logger
 logger = setup_logger(__name__)
 
-MOT_ARCH = ['JDE', 'FairMOT', 'DeepSORT', 'ByteTrack', 'CenterTrack']
-MOT_ARCH_JDE = MOT_ARCH[:2]
-MOT_ARCH_SDE = MOT_ARCH[2:4]
+MOT_ARCH = ['JDE', 'FairMOT', 'FasterMOT', 'DeepSORT', 'ByteTrack', 'CenterTrack']
+MOT_ARCH_JDE = MOT_ARCH[:3]
+MOT_ARCH_SDE = MOT_ARCH[3:5]
 MOT_DATA_TYPE = ['mot', 'mcmot', 'kitti']
 
 __all__ = ['Tracker']

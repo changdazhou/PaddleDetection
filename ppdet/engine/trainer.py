@@ -58,7 +58,7 @@ logger = setup_logger('ppdet.engine')
 
 __all__ = ['Trainer']
 
-MOT_ARCH = ['JDE', 'FairMOT', 'DeepSORT', 'ByteTrack', 'CenterTrack']
+MOT_ARCH = ['JDE', 'FairMOT', 'FasterMOT', 'DeepSORT', 'ByteTrack', 'CenterTrack']
 
 
 class Trainer(object):
@@ -92,7 +92,7 @@ class Trainer(object):
             logger.error('DeepSORT has no need of training on mot dataset.')
             sys.exit(1)
 
-        if cfg.architecture == 'FairMOT' and self.mode == 'eval':
+        if (cfg.architecture == 'FairMOT' or cfg.architecture == 'FasterMOT') and self.mode == 'eval':
             images = self.parse_mot_images(cfg)
             self.dataset.set_images(images)
 
@@ -105,7 +105,7 @@ class Trainer(object):
                 'num_identities'] = self.dataset.num_identities_dict[0]
             # JDE only support single class MOT now.
 
-        if cfg.architecture == 'FairMOT' and self.mode == 'train':
+        if (cfg.architecture == 'FairMOT' or cfg.architecture == 'FasterMOT') and self.mode == 'train':
             self.cfg['FairMOTEmbeddingHead'][
                 'num_identities_dict'] = self.dataset.num_identities_dict
             # FairMOT support single class and multi-class MOT now.
@@ -140,7 +140,7 @@ class Trainer(object):
         # EvalDataset build with BatchSampler to evaluate in single device
         # TODO: multi-device evaluate
         if self.mode == 'eval':
-            if cfg.architecture == 'FairMOT':
+            if (cfg.architecture == 'FairMOT' or cfg.architecture == 'FasterMOT'):
                 self.loader = create('EvalMOTReader')(self.dataset, 0)
             elif cfg.architecture == "METRO_Body":
                 reader_name = '{}Reader'.format(self.mode.capitalize())

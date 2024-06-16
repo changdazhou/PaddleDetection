@@ -37,7 +37,7 @@ logger = setup_logger(__name__)
 
 __all__ = [
     'RGBReverse', 'LetterBoxResize', 'MOTRandomAffine', 'Gt2JDETargetThres',
-    'Gt2JDETargetMax', 'Gt2FairMOTTarget'
+    'Gt2JDETargetMax', 'Gt2FairMOTTarget','Gt2FasterMOTTarget'
 ]
 
 
@@ -625,3 +625,395 @@ class Gt2FairMOTTarget(Gt2TTFTarget):
             sample.pop('gt_score', None)
             sample.pop('gt_ide', None)
         return samples
+
+class Gt2FasterMOTTarget(Gt2TTFTarget):
+    __shared__ = ['num_classes']
+    """
+    Generate FairMOT targets by ground truth data.
+    Difference between Gt2FasterMOTTarget and Gt2TTFTarget are:
+        1. the gaussian kernal radius to generate a heatmap.
+        2. the targets needed during training.
+    
+    Args:
+        num_classes(int): the number of classes.
+        down_ratio(int): the down ratio from images to heatmap, 4 by default.
+        max_objs(int): the maximum number of ground truth objects in a image, 500 by default.
+    """
+
+    def __init__(self, num_classes=1, down_ratio=4, max_objs=500):
+        super(Gt2TTFTarget, self).__init__()
+        self.down_ratio = down_ratio
+        self.num_classes = num_classes
+        self.max_objs = max_objs
+        self.alpha = 0.54
+        
+    def __call__(self, samples, context=None):
+        for sample in samples:
+            original_h = sample['image'].shape[1]
+            original_w = sample['image'].shape[2]
+            output_h = original_h // self.down_ratio
+            output_w = original_w // self.down_ratio
+            heatmap = np.zeros(
+                (self.num_classes, output_h, output_w), dtype='float32')
+            box_target = np.ones(
+                (4, output_h, output_w), dtype='float32') * -1
+            index = np.zeros((self.max_objs, ), dtype=np.int64)
+            index_mask = np.zeros((self.max_objs, ), dtype=np.int32)
+            reg_weight = np.zeros((1, output_h, output_w), dtype='float32')
+            reid = np.zeros((self.max_objs, ), dtype=np.int64)
+            bbox_xys = np.zeros((self.max_objs, 4), dtype=np.float32)
+            if self.num_classes > 1:
+                # each category corresponds to a set of track ids
+                cls_tr_ids = np.zeros(
+                    (self.num_classes, output_h, output_w), dtype=np.int64)
+                cls_id_map = np.full((output_h, output_w), -1, dtype=np.int64)
+
+            gt_bbox = sample['gt_bbox']
+            gt_class = sample['gt_class']
+            gt_ide = sample['gt_ide']
+            
+            # ctx,cty,w,h -> x,y,w,h
+            gt_bbox[:,0] = (gt_bbox[:, 0]-gt_bbox[:, 2]/2) * original_w
+            gt_bbox[:,1] = (gt_bbox[:, 1]-gt_bbox[:, 3]/2) * original_h
+            gt_bbox[:,2] = gt_bbox[:, 2] * original_w
+            gt_bbox[:,3] = gt_bbox[:, 3] * original_h
+
+            bbox_w = gt_bbox[:, 2] + 1
+            bbox_h = gt_bbox[:, 3] + 1
+            area = bbox_w * bbox_h
+            boxes_areas_log = np.log(area)
+            boxes_ind = np.argsort(boxes_areas_log, axis=0)[::-1]
+            boxes_area_topk_log = boxes_areas_log[boxes_ind]
+            
+            # x,y,w,h -> x1,y1,x2,y2
+            gt_bbox[:,2] = gt_bbox[:,0] + gt_bbox[:, 2]
+            gt_bbox[:,3] = gt_bbox[:,1] + gt_bbox[:, 3]
+            
+            gt_bbox = gt_bbox[boxes_ind]
+            gt_class = gt_class[boxes_ind]
+            
+
+            feat_gt_bbox = gt_bbox / self.down_ratio
+            feat_gt_bbox[:, 0] = np.clip(feat_gt_bbox[:, 0], 0, output_w - 1)
+            feat_gt_bbox[:, 1] = np.clip(feat_gt_bbox[:, 1], 0, output_h - 1)
+            feat_gt_bbox[:, 2] = np.clip(feat_gt_bbox[:, 2], 0, output_w - 1)
+            feat_gt_bbox[:, 3] = np.clip(feat_gt_bbox[:, 3], 0, output_h - 1)
+            feat_hs, feat_ws = (feat_gt_bbox[:, 3] - feat_gt_bbox[:, 1],feat_gt_bbox[:, 2] - feat_gt_bbox[:, 0])
+            
+
+            ct_inds = np.stack(
+                [(gt_bbox[:, 0] + gt_bbox[:, 2]) / 2,
+                 (gt_bbox[:, 1] + gt_bbox[:, 3]) / 2],
+                axis=1) / self.down_ratio
+            
+
+            h_radiuses_alpha = (feat_hs / 2. * self.alpha).astype('int32')
+            w_radiuses_alpha = (feat_ws / 2. * self.alpha).astype('int32')
+
+            for k in range(len(gt_bbox)):
+                cls_id = gt_class[k]
+                ide = gt_ide[k][0]
+                bbox = gt_bbox[k]
+                x = bbox[0]
+                y = bbox[1]
+                w = bbox[2]-bbox[0]
+                h = bbox[3]-bbox[1]
+
+                reid[k] = ide
+                
+                if h > 0 and w > 0:
+                    fake_heatmap = np.zeros((output_h, output_w), dtype='float32')
+                    self.draw_truncate_gaussian(fake_heatmap, ct_inds[k],
+                                                h_radiuses_alpha[k],
+                                                w_radiuses_alpha[k])
+
+                    heatmap[cls_id] = np.maximum(heatmap[cls_id], fake_heatmap)
+                    box_target_inds = fake_heatmap > 0
+                    box_target[:, box_target_inds] = gt_bbox[k][:, None]
+
+                    local_heatmap = fake_heatmap[box_target_inds]
+                    ct_div = np.sum(local_heatmap)
+                    local_heatmap *= boxes_area_topk_log[k]
+                    reg_weight[0, box_target_inds] = local_heatmap / ct_div
+                    
+                    ctx = np.clip(x+(w/2), 0, output_w - 1)
+                    cty = np.clip(y+(h/2), 0, output_h - 1)
+                    ct = np.array([ctx, cty], dtype=np.float32)
+                    ct_int = ct.astype(np.int32)
+                    index_mask[k] = 1
+                    index[k] = ct_int[1] * output_w + ct_int[0]
+                    bbox_xys[k] = bbox
+                    if self.num_classes > 1:
+                            cls_id_map[ct_int[1], ct_int[0]] = cls_id
+                            cls_tr_ids[cls_id][ct_int[1]][ct_int[0]] = ide - 1
+                # plt.imshow(heatmap[0])
+                # plt.colorbar()
+                # fig = plt.gcf()
+                # plt.margins(0,0)
+                # fig.savefig('reponse_map.png', dpi=500, bbox_inches='tight')
+            # print(index_mask.shape)
+            # exit()
+            # print(box_target)
+            sample['ttf_heatmap'] = heatmap
+            sample['ttf_box_target'] = box_target
+            sample['ttf_reg_weight'] = reg_weight
+            sample['index'] = index
+            sample['index_mask'] = index_mask
+            sample['reid'] = reid
+            if self.num_classes > 1:
+                sample['cls_id_map'] = cls_id_map
+                sample['cls_tr_ids'] = cls_tr_ids
+            sample['bbox_xys'] = bbox_xys
+            sample.pop('is_crowd', None)
+            sample.pop('difficult', None)
+            sample.pop('gt_class', None)
+            sample.pop('gt_bbox', None)
+            sample.pop('gt_score', None)
+            sample.pop('gt_ide', None)
+        return samples
+
+
+# class Gt2FasterMOTTarget(Gt2TTFTarget):
+#     __shared__ = ['num_classes']
+#     """
+#     Generate FairMOT targets by ground truth data.
+#     Difference between Gt2FasterMOTTarget and Gt2TTFTarget are:
+#         1. the gaussian kernal radius to generate a heatmap.
+#         2. the targets needed during training.
+    
+#     Args:
+#         num_classes(int): the number of classes.
+#         down_ratio(int): the down ratio from images to heatmap, 4 by default.
+#         max_objs(int): the maximum number of ground truth objects in a image, 500 by default.
+#     """
+
+#     def __init__(self, num_classes=1, down_ratio=4, max_objs=500):
+#         super(Gt2FasterMOTTarget, self).__init__()
+#         self.down_ratio = down_ratio
+#         self.num_classes = num_classes
+#         self.max_objs = max_objs
+#         self.alpha = 0.54
+
+#     def __call__(self, samples, context=None):
+#         for b_id, sample in enumerate(samples):
+#             output_h = sample['image'].shape[1] // self.down_ratio
+#             output_w = sample['image'].shape[2] // self.down_ratio
+
+#             heatmap = np.zeros(
+#                 (self.num_classes, output_h, output_w), dtype='float32')
+#             box_target = np.ones(
+#                 (4, output_h, output_w), dtype='float32') * -1
+#             reg_weight = np.zeros((1, output_h, output_w), dtype='float32')
+#             index = np.zeros((self.max_objs, ), dtype=np.int64)
+#             index_mask = np.zeros((self.max_objs, ), dtype=np.int32)
+#             reid = np.zeros((self.max_objs, ), dtype=np.int64)
+#             bbox_xys = np.zeros((self.max_objs, 4), dtype=np.float32)
+#             if self.num_classes > 1:
+#                 # each category corresponds to a set of track ids
+#                 cls_tr_ids = np.zeros(
+#                     (self.num_classes, output_h, output_w), dtype=np.int64)
+#                 cls_id_map = np.full((output_h, output_w), -1, dtype=np.int64)
+
+#             gt_bbox = sample['gt_bbox']
+#             gt_class = sample['gt_class']
+#             gt_ide = sample['gt_ide']
+            
+#             bbox_w = (gt_bbox[:, 0] + gt_bbox[:, 2] / 2) * output_w
+#             bbox_h = (gt_bbox[:, 1] + gt_bbox[:, 3] / 2) * output_h
+#             area = bbox_w * bbox_h
+#             boxes_areas_log = np.log(area)
+#             boxes_ind = np.argsort(boxes_areas_log, axis=0)[::-1]
+#             boxes_area_topk_log = boxes_areas_log[boxes_ind]
+#             gt_bbox = gt_bbox[boxes_ind]
+#             gt_class = gt_class[boxes_ind]
+            
+
+#             for k in range(len(gt_bbox)):
+#                 cls_id = gt_class[k][0]
+#                 bbox = gt_bbox[k]
+#                 ide = gt_ide[k][0]
+#                 bbox[[0, 2]] = bbox[[0, 2]] * output_w
+#                 bbox[[1, 3]] = bbox[[1, 3]] * output_h
+#                 bbox[0] = np.clip(bbox[0], 0, output_w - 1)
+#                 bbox[1] = np.clip(bbox[1], 0, output_h - 1)
+#                 h = bbox[3]
+#                 w = bbox[2]
+
+#                 bbox_xy = copy.deepcopy(bbox)
+#                 bbox_xy[0] = bbox_xy[0] - bbox_xy[2] / 2
+#                 bbox_xy[1] = bbox_xy[1] - bbox_xy[3] / 2
+#                 bbox_xy[2] = bbox_xy[0] + bbox_xy[2]
+#                 bbox_xy[3] = bbox_xy[1] + bbox_xy[3]
+
+#                 if h > 0 and w > 0:
+#                     h_radiuses_alpha = (h / 2. * self.alpha).astype('int32')
+#                     w_radiuses_alpha = (w / 2. * self.alpha).astype('int32')
+#                     fake_heatmap = np.zeros((output_h, output_w), dtype='float32')
+#                     ct = np.array([bbox[0], bbox[1]], dtype=np.float32)
+#                     ct_int = ct.astype(np.int32)
+#                     self.draw_truncate_gaussian(fake_heatmap, ct_int, h_radiuses_alpha,
+#                                                 w_radiuses_alpha)
+#                     heatmap[cls_id] = np.maximum(heatmap[cls_id], fake_heatmap)
+#                     box_target_inds = fake_heatmap > 0
+#                     box_target[:, box_target_inds] = gt_bbox[k][:, None]
+
+#                     local_heatmap = fake_heatmap[box_target_inds]
+#                     ct_div = np.sum(local_heatmap)
+#                     local_heatmap *= boxes_area_topk_log[k]
+#                     reg_weight[0, box_target_inds] = local_heatmap / ct_div
+#                     index[k] = ct_int[1] * output_w + ct_int[0]
+#                     index_mask[k] = 1
+#                     reid[k] = ide
+#                     bbox_xys[k] = bbox_xy
+#                     if self.num_classes > 1:
+#                         cls_id_map[ct_int[1], ct_int[0]] = cls_id
+#                         cls_tr_ids[cls_id][ct_int[1]][ct_int[0]] = ide - 1
+#                         # track id start from 0
+
+#             sample['ttf_heatmap'] = heatmap
+#             sample['ttf_box_target'] = box_target
+#             sample['ttf_reg_weight'] = reg_weight
+#             sample['index'] = index
+#             sample['index_mask'] = index_mask
+#             sample['reid'] = reid
+#             if self.num_classes > 1:
+#                 sample['cls_id_map'] = cls_id_map
+#                 sample['cls_tr_ids'] = cls_tr_ids
+#             sample['bbox_xys'] = bbox_xys
+#             sample.pop('is_crowd', None)
+#             sample.pop('difficult', None)
+#             sample.pop('gt_class', None)
+#             sample.pop('gt_bbox', None)
+#             sample.pop('gt_score', None)
+#             sample.pop('gt_ide', None)
+#         return samples
+    
+# class Gt2FasterMOTTarget(Gt2TTFTarget):
+#     __shared__ = ['num_classes']
+#     """
+#     Generate FairMOT targets by ground truth data.
+#     Difference between Gt2FasterMOTTarget and Gt2TTFTarget are:
+#         1. the gaussian kernal radius to generate a heatmap.
+#         2. the targets needed during training.
+    
+#     Args:
+#         num_classes(int): the number of classes.
+#         down_ratio(int): the down ratio from images to heatmap, 4 by default.
+#         max_objs(int): the maximum number of ground truth objects in a image, 500 by default.
+#     """
+
+#     def __init__(self, num_classes=1, down_ratio=4, max_objs=500):
+#         super(Gt2TTFTarget, self).__init__()
+#         self.down_ratio = down_ratio
+#         self.num_classes = num_classes
+#         self.max_objs = max_objs
+#         self.alpha = 0.54
+        
+#     def __call__(self, samples, context=None):
+#         for sample in samples:
+#             output_h = sample['image'].shape[1] // self.down_ratio
+#             output_w = sample['image'].shape[2] // self.down_ratio
+#             heatmap = np.zeros(
+#                 (self.num_classes, output_h, output_w), dtype='float32')
+#             box_target = np.ones(
+#                 (4, output_h, output_w), dtype='float32') * -1
+#             index = np.zeros((self.max_objs, ), dtype=np.int64)
+#             index_mask = np.zeros((self.max_objs, ), dtype=np.int32)
+#             reg_weight = np.zeros((1, output_h, output_w), dtype='float32')
+#             reid = np.zeros((self.max_objs, ), dtype=np.int64)
+#             bbox_xys = np.zeros((self.max_objs, 4), dtype=np.float32)
+#             if self.num_classes > 1:
+#                 # each category corresponds to a set of track ids
+#                 cls_tr_ids = np.zeros(
+#                     (self.num_classes, output_h, output_w), dtype=np.int64)
+#                 cls_id_map = np.full((output_h, output_w), -1, dtype=np.int64)
+
+#             gt_bbox = sample['gt_bbox']
+#             gt_class = sample['gt_class']
+#             gt_ide = sample['gt_ide']
+            
+#             gt_bbox[:,0] = gt_bbox[:, 0] * output_w
+#             gt_bbox[:,1] = gt_bbox[:, 1] * output_h
+#             gt_bbox[:,2] = gt_bbox[:, 2] * output_w
+#             gt_bbox[:,3] = gt_bbox[:, 3] * output_h
+
+#             bbox_w = gt_bbox[:, 2]
+#             bbox_h = gt_bbox[:, 3]
+#             area = bbox_w * bbox_h
+#             boxes_areas_log = np.log(area)
+#             boxes_ind = np.argsort(boxes_areas_log, axis=0)[::-1]
+#             boxes_area_topk_log = boxes_areas_log[boxes_ind]
+#             gt_bbox = gt_bbox[boxes_ind]
+#             gt_class = gt_class[boxes_ind]
+
+#             feat_gt_bbox = gt_bbox 
+#             feat_gt_bbox[:, 0] = np.clip(feat_gt_bbox[:, 0], 0, output_w - 1)
+#             feat_gt_bbox[:, 1] = np.clip(feat_gt_bbox[:, 1], 0, output_h - 1)
+#             feat_gt_bbox[:, 2] = np.clip(feat_gt_bbox[:, 2], 0, output_w - 1)
+#             feat_gt_bbox[:, 3] = np.clip(feat_gt_bbox[:, 3], 0, output_h - 1)
+#             feat_hs, feat_ws = (feat_gt_bbox[:, 3],feat_gt_bbox[:, 2])
+
+#             ct_inds = np.stack(
+#                 [gt_bbox[:, 0] + gt_bbox[:, 2] / 2,
+#                  gt_bbox[:, 1] + gt_bbox[:, 3] / 2],
+#                 axis=1)
+            
+
+#             h_radiuses_alpha = (feat_hs / 2. * self.alpha).astype('int32')
+#             w_radiuses_alpha = (feat_ws / 2. * self.alpha).astype('int32')
+
+#             for k in range(len(gt_bbox)):
+#                 cls_id = gt_class[k]
+#                 ide = gt_ide[k][0]
+#                 bbox = gt_bbox[k]
+#                 bbox[0] = np.clip(bbox[0], 0, output_w - 1)
+#                 bbox[1] = np.clip(bbox[1], 0, output_h - 1)
+#                 h = bbox[3]
+#                 w = bbox[2]
+
+#                 bbox_xy = copy.deepcopy(bbox)
+#                 bbox_xy[0] = bbox_xy[0] - bbox_xy[2] / 2
+#                 bbox_xy[1] = bbox_xy[1] - bbox_xy[3] / 2
+#                 bbox_xy[2] = bbox_xy[0] + bbox_xy[2]
+#                 bbox_xy[3] = bbox_xy[1] + bbox_xy[3]
+#                 reid[k] = ide
+                
+#                 if h > 0 and w > 0:
+#                     fake_heatmap = np.zeros((output_h, output_w), dtype='float32')
+#                     self.draw_truncate_gaussian(fake_heatmap, ct_inds[k],
+#                                                 h_radiuses_alpha[k],
+#                                                 w_radiuses_alpha[k])
+
+#                     heatmap[cls_id] = np.maximum(heatmap[cls_id], fake_heatmap)
+#                     box_target_inds = fake_heatmap > 0
+#                     box_target[:, box_target_inds] = gt_bbox[k][:, None]
+
+#                     local_heatmap = fake_heatmap[box_target_inds]
+#                     ct_div = np.sum(local_heatmap)
+#                     local_heatmap *= boxes_area_topk_log[k]
+#                     reg_weight[0, box_target_inds] = local_heatmap / ct_div
+                
+#                     ct = np.array([bbox[0], bbox[1]], dtype=np.float32)
+#                     ct_int = ct.astype(np.int32)
+#                     index_mask[k] = 1
+#                     index[k] = ct_int[1] * output_w + ct_int[0]
+#                     if self.num_classes > 1:
+#                             cls_id_map[ct_int[1], ct_int[0]] = cls_id
+#                             cls_tr_ids[cls_id][ct_int[1]][ct_int[0]] = ide - 1
+#             sample['ttf_heatmap'] = heatmap
+#             sample['ttf_box_target'] = box_target
+#             sample['ttf_reg_weight'] = reg_weight
+#             sample['index'] = index
+#             sample['index_mask'] = index_mask
+#             sample['reid'] = reid
+#             if self.num_classes > 1:
+#                 sample['cls_id_map'] = cls_id_map
+#                 sample['cls_tr_ids'] = cls_tr_ids
+#             sample['bbox_xys'] = bbox_xys
+#             sample.pop('is_crowd', None)
+#             sample.pop('difficult', None)
+#             sample.pop('gt_class', None)
+#             sample.pop('gt_bbox', None)
+#             sample.pop('gt_score', None)
+#             sample.pop('gt_ide', None)
+#         return samples

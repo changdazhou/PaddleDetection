@@ -37,17 +37,20 @@ class TTFNet(BaseArch):
 
     __category__ = 'architecture'
     __inject__ = ['post_process']
+    __shared__ = ['for_mot']
 
     def __init__(self,
                  backbone='DarkNet',
                  neck='TTFFPN',
                  ttf_head='TTFHead',
-                 post_process='BBoxPostProcess'):
+                 post_process='BBoxPostProcess',
+                 for_mot=False):
         super(TTFNet, self).__init__()
         self.backbone = backbone
         self.neck = neck
         self.ttf_head = ttf_head
         self.post_process = post_process
+        self.for_mot = for_mot
 
     @classmethod
     def from_config(cls, cfg, *args, **kwargs):
@@ -66,33 +69,41 @@ class TTFNet(BaseArch):
         }
 
     def _forward(self):
-        body_feats = self.backbone(self.inputs)
-        body_feats = self.neck(body_feats)
-        hm, wh = self.ttf_head(body_feats)
-        if self.training:
-            return hm, wh
-        else:
-            bbox, bbox_num = self.post_process(hm, wh, self.inputs['im_shape'],
-                                               self.inputs['scale_factor'])
-            return bbox, bbox_num
+        neck_feat = self.backbone(self.inputs)
+        if self.neck is not None:
+            neck_feat = self.neck(neck_feat)
+        head_out = self.ttf_head(neck_feat, self.inputs)
+        if self.for_mot:
+            head_out.update({'neck_feat': neck_feat})
+        elif self.training:
+            head_out['loss'] = head_out.pop('det_loss')
+        return head_out
 
     def get_loss(self, ):
-        loss = {}
-        heatmap = self.inputs['ttf_heatmap']
-        box_target = self.inputs['ttf_box_target']
-        reg_weight = self.inputs['ttf_reg_weight']
-        hm, wh = self._forward()
-        head_loss = self.ttf_head.get_loss(hm, wh, heatmap, box_target,
-                                           reg_weight)
-        loss.update(head_loss)
-        total_loss = paddle.add_n(list(loss.values()))
-        loss.update({'loss': total_loss})
-        return loss
+        return self._forward()
 
     def get_pred(self):
-        bbox_pred, bbox_num = self._forward()
-        output = {
-            "bbox": bbox_pred,
-            "bbox_num": bbox_num,
-        }
+        head_out = self._forward()
+        if self.for_mot:
+            bbox, bbox_num, bbox_inds, topk_clses, topk_ys, topk_xs = self.post_process(
+                head_out['hm'],
+                head_out['wh'],
+                im_shape=self.inputs['im_shape'],
+                scale_factor=self.inputs['scale_factor'])
+            output = {
+                "bbox": bbox,
+                "bbox_num": bbox_num,
+                "bbox_inds": bbox_inds,
+                "topk_clses": topk_clses,
+                "topk_ys": topk_ys,
+                "topk_xs": topk_xs,
+                "neck_feat": head_out['neck_feat']
+            }
+        else:
+            bbox, bbox_num = self.post_process(head_out['hm'], head_out['wh'], self.inputs['im_shape'],
+                                               self.inputs['scale_factor'])
+            output = {
+                "bbox": bbox,
+                "bbox_num": bbox_num,
+            }
         return output

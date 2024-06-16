@@ -720,7 +720,7 @@ class SSDBox(object):
 class TTFBox(object):
     __shared__ = ['down_ratio']
 
-    def __init__(self, max_per_img=100, score_thresh=0.01, down_ratio=4):
+    def __init__(self, max_per_img=500, score_thresh=0.0, down_ratio=4):
         super(TTFBox, self).__init__()
         self.max_per_img = max_per_img
         self.score_thresh = score_thresh
@@ -794,26 +794,26 @@ class TTFBox(object):
         results = paddle.concat([clses, scores, bboxes], axis=1)
         # hack: append result with cls=-1 and score=1. to avoid all scores
         # are less than score_thresh which may cause error in gather.
-        fill_r = paddle.to_tensor(np.array([[-1, 1, 0, 0, 0, 0]]))
-        fill_r = paddle.cast(fill_r, results.dtype)
-        results = paddle.concat([results, fill_r])
-        scores = results[:, 1]
-        valid_ind = paddle.nonzero(scores > self.score_thresh)
-        results = paddle.gather(results, valid_ind)
-        return results, paddle.shape(results)[0:1]
+        # fill_r = paddle.to_tensor(np.array([[-1, 1, 0, 0, 0, 0]]))
+        # fill_r = paddle.cast(fill_r, results.dtype)
+        # results = paddle.concat([results, fill_r])
+        # scores = results[:, 1]
+        # valid_ind = paddle.nonzero(scores > self.score_thresh)
+        # results = paddle.gather(results, valid_ind)
+        return results, paddle.shape(results)[0:1],inds,clses, ys, xs 
 
     def __call__(self, hm, wh, im_shape, scale_factor):
         results = []
         results_num = []
         for i in range(scale_factor.shape[0]):
-            result, num = self._decode(hm[i:i + 1, ], wh[i:i + 1, ],
+            result, num,inds,clses,ys,xs = self._decode(hm[i:i + 1, ], wh[i:i + 1, ],
                                        im_shape[i:i + 1, ],
                                        scale_factor[i:i + 1, ])
             results.append(result)
             results_num.append(num)
         results = paddle.concat(results, axis=0)
         results_num = paddle.concat(results_num, axis=0)
-        return results, results_num
+        return results, results_num,inds,clses,ys,xs
 
 
 @register

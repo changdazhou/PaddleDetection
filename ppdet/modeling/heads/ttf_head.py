@@ -244,10 +244,22 @@ class TTFHead(nn.Layer):
             input_shape = input_shape[0]
         return {'in_channels': input_shape.channels, }
 
-    def forward(self, feats):
+    def forward(self, feats,inputs):
+        head_out = {}
         hm = self.hm_head(feats)
         wh = self.wh_head(feats) * self.wh_offset_base
-        return hm, wh
+        head_out = {"wh": wh, "hm": hm}
+        if self.training:
+            heatmap = inputs['ttf_heatmap']
+            box_target = inputs['ttf_box_target']
+            reg_weight = inputs['ttf_reg_weight']
+            head_loss = self.get_loss(hm, wh, heatmap, box_target,
+                                            reg_weight)
+            total_loss = paddle.add_n(list(head_loss.values()))
+            head_loss.update({'det_loss': total_loss})
+            return head_loss
+        else:
+            return head_out
 
     def filter_box_by_weight(self, pred, target, weight):
         """
@@ -299,6 +311,8 @@ class TTFHead(nn.Layer):
 
         pred_boxes, boxes, mask = self.filter_box_by_weight(pred_boxes, boxes,
                                                             mask)
+        # print("pred_boxes",pred_boxes)
+        # print("boxes",boxes)
         mask.stop_gradient = True
         wh_loss = self.wh_loss(
             pred_boxes,

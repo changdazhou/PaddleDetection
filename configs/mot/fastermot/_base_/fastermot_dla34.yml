@@ -1,0 +1,52 @@
+architecture: FasterMOT
+pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/fairmot_dla34_crowdhuman_pretrained.pdparams
+for_mot: True
+
+FasterMOT:
+  detector: TTFNet
+  reid: FairMOTEmbeddingHead
+  loss: FairMOTLoss
+  tracker: JDETracker
+
+TTFNet:
+  backbone: DLA
+  neck: CenterNetDLAFPN
+  ttf_head: TTFHead
+  post_process: TTFNetPostProcess
+
+DLA:
+  depth: 34
+
+CenterNetDLAFPN:
+  down_ratio: 4
+
+TTFFPN:
+  planes: [256, 128, 64]
+  shortcut_num: [3, 2, 1]
+
+TTFHead:
+  hm_loss:
+    name: CTFocalLoss
+    loss_weight: 1.
+  wh_loss:
+    name: GIoULoss
+    loss_weight: 5.
+    reduction: sum
+
+TTFNetPostProcess:
+  decode:
+    name: TTFBox
+    max_per_img: 500
+    score_thresh: 0.01
+    down_ratio: 4
+
+FairMOTEmbeddingHead:
+  ch_head: 256
+  ch_emb: 128
+
+JDETracker:
+  conf_thres: 0.4
+  tracked_thresh: 0.4
+  metric_type: cosine
+  min_box_area: 200
+  vertical_ratio: 1.6 # for pedestrian

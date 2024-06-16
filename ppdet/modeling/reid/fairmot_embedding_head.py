@@ -150,7 +150,6 @@ class FairMOTEmbeddingHead(nn.Layer):
         batch_inds = paddle.concat(batch_inds, axis=0)
         index = paddle.concat(x=[batch_inds, index], axis=2)
         feat = paddle.gather_nd(feat, index=index)
-
         mask = paddle.unsqueeze(mask, axis=2)
         mask = paddle.expand_as(mask, feat)
         mask.stop_gradient = True

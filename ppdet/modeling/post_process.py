@@ -27,7 +27,7 @@ except Exception:
 __all__ = [
     'BBoxPostProcess', 'MaskPostProcess', 'JDEBBoxPostProcess',
     'CenterNetPostProcess', 'DETRPostProcess', 'SparsePostProcess',
-    'DETRBBoxSemiPostProcess'
+    'DETRBBoxSemiPostProcess','TTFNetPostProcess'
 ]
 
 
@@ -108,6 +108,168 @@ class BBoxPostProcess(object):
             pred_result (Tensor): The final prediction results with shape [N, 6]
                 including labels, scores and bboxes.
         """
+        if self.export_eb:
+            # enable rcnn models for edgeboard hw to skip the following postprocess.
+            return bboxes, bboxes, bbox_num
+
+        if not self.export_onnx:
+            bboxes_list = []
+            bbox_num_list = []
+            id_start = 0
+            fake_bboxes = paddle.to_tensor(
+                np.array(
+                    [[0., 0.0, 0.0, 0.0, 1.0, 1.0]], dtype='float32'))
+            fake_bbox_num = paddle.to_tensor(np.array([1], dtype='int32'))
+
+            # add fake bbox when output is empty for each batch
+            for i in range(bbox_num.shape[0]):
+                if bbox_num[i] == 0:
+                    bboxes_i = fake_bboxes
+                    bbox_num_i = fake_bbox_num
+                else:
+                    bboxes_i = bboxes[id_start:id_start + bbox_num[i], :]
+                    bbox_num_i = bbox_num[i:i + 1]
+                    id_start += bbox_num[i:i + 1]
+                bboxes_list.append(bboxes_i)
+                bbox_num_list.append(bbox_num_i)
+            bboxes = paddle.concat(bboxes_list)
+            bbox_num = paddle.concat(bbox_num_list)
+
+        origin_shape = paddle.floor(im_shape / scale_factor + 0.5)
+
+        if not self.export_onnx:
+            origin_shape_list = []
+            scale_factor_list = []
+            # scale_factor: scale_y, scale_x
+            for i in range(bbox_num.shape[0]):
+                expand_shape = paddle.expand(origin_shape[i:i + 1, :],
+                                             [bbox_num[i:i + 1], 2])
+                scale_y, scale_x = scale_factor[i, 0:1], scale_factor[i, 1:2]
+                scale = paddle.concat([scale_x, scale_y, scale_x, scale_y])
+                expand_scale = paddle.expand(scale, [bbox_num[i:i + 1], 4])
+                origin_shape_list.append(expand_shape)
+                scale_factor_list.append(expand_scale)
+
+            self.origin_shape_list = paddle.concat(origin_shape_list)
+            scale_factor_list = paddle.concat(scale_factor_list)
+
+        else:
+            # simplify the computation for bs=1 when exporting onnx
+            scale_y, scale_x = scale_factor[0][0], scale_factor[0][1]
+            scale = paddle.concat(
+                [scale_x, scale_y, scale_x, scale_y]).unsqueeze(0)
+            self.origin_shape_list = paddle.expand(origin_shape,
+                                                   [bbox_num[0:1], 2])
+            scale_factor_list = paddle.expand(scale, [bbox_num[0:1], 4])
+
+        # bboxes: [N, 6], label, score, bbox
+        pred_label = bboxes[:, 0:1]
+        pred_score = bboxes[:, 1:2]
+        pred_bbox = bboxes[:, 2:]
+        # rescale bbox to original image
+        scaled_bbox = pred_bbox / scale_factor_list
+        origin_h = self.origin_shape_list[:, 0]
+        origin_w = self.origin_shape_list[:, 1]
+        zeros = paddle.zeros_like(origin_h)
+        # clip bbox to [0, original_size]
+        x1 = paddle.maximum(paddle.minimum(scaled_bbox[:, 0], origin_w), zeros)
+        y1 = paddle.maximum(paddle.minimum(scaled_bbox[:, 1], origin_h), zeros)
+        x2 = paddle.maximum(paddle.minimum(scaled_bbox[:, 2], origin_w), zeros)
+        y2 = paddle.maximum(paddle.minimum(scaled_bbox[:, 3], origin_h), zeros)
+        pred_bbox = paddle.stack([x1, y1, x2, y2], axis=-1)
+        # filter empty bbox
+        keep_mask = nonempty_bbox(pred_bbox, return_mask=True)
+        keep_mask = paddle.unsqueeze(keep_mask, [1])
+        pred_label = paddle.where(keep_mask, pred_label,
+                                  paddle.ones_like(pred_label) * -1)
+        pred_result = paddle.concat([pred_label, pred_score, pred_bbox], axis=1)
+        return bboxes, pred_result, bbox_num
+
+    def get_origin_shape(self, ):
+        return self.origin_shape_list
+    
+@register
+class TTFNetPostProcess(object):
+    __shared__ = ['num_classes', 'export_onnx', 'export_eb']
+    __inject__ = ['decode', 'nms']
+
+    def __init__(self,
+                 num_classes=80,
+                 decode=None,
+                 nms=None,
+                 export_onnx=False,
+                 export_eb=False):
+        super(TTFNetPostProcess, self).__init__()
+        self.num_classes = num_classes
+        self.decode = decode
+        self.nms = nms
+        self.export_onnx = export_onnx
+        self.export_eb = export_eb
+
+    def __call__(self, head_out, rois, im_shape, scale_factor):
+        """
+        Decode the bbox and do NMS if needed.
+
+        Args:
+            head_out (tuple): bbox_pred and cls_prob of bbox_head output.
+            rois (tuple): roi and rois_num of rpn_head output.
+            im_shape (Tensor): The shape of the input image.
+            scale_factor (Tensor): The scale factor of the input image.
+            export_onnx (bool): whether export model to onnx
+        Returns:
+            bbox_pred (Tensor): The output prediction with shape [N, 6], including
+                labels, scores and bboxes. The size of bboxes are corresponding
+                to the input image, the bboxes may be used in other branch.
+            bbox_num (Tensor): The number of prediction boxes of each batch with
+                shape [1], and is N.
+        """
+        if self.nms is not None:
+            bboxes, score,inds,clses,ys,xs = self.decode(head_out, rois, im_shape, scale_factor)
+            bbox_pred, bbox_num, before_nms_indexes = self.nms(bboxes, score,
+                                                               self.num_classes)
+
+        else:
+            bbox_pred, bbox_num,inds,clses,ys,xs = self.decode(head_out, rois, im_shape,
+                                              scale_factor)
+
+        if self.export_onnx:
+            # add fake box after postprocess when exporting onnx 
+            fake_bboxes = paddle.to_tensor(
+                np.array(
+                    [[0., 0.0, 0.0, 0.0, 1.0, 1.0]], dtype='float32'))
+
+            bbox_pred = paddle.concat([bbox_pred, fake_bboxes])
+            bbox_num = bbox_num + 1
+            
+
+        if self.nms is not None:
+            return bbox_pred, bbox_num, before_nms_indexes,inds,clses,ys,xs
+        else:
+            return bbox_pred, bbox_num,inds,clses,ys,xs
+        
+        results = paddle.concat([clses, scores, bboxes], axis=1)
+        return results, paddle.shape(results)[0:1], inds, topk_clses, ys, xs
+
+    def get_pred(self, bboxes, bbox_num, im_shape, scale_factor):
+        """
+        Rescale, clip and filter the bbox from the output of NMS to 
+        get final prediction. 
+
+        Notes:
+        Currently only support bs = 1.
+
+        Args:
+            bboxes (Tensor): The output bboxes with shape [N, 6] after decode
+                and NMS, including labels, scores and bboxes.
+            bbox_num (Tensor): The number of prediction boxes of each batch with
+                shape [1], and is N.
+            im_shape (Tensor): The shape of the input image.
+            scale_factor (Tensor): The scale factor of the input image.
+        Returns:
+            pred_result (Tensor): The final prediction results with shape [N, 6]
+                including labels, scores and bboxes.
+        """
+        print('*'*200)
         if self.export_eb:
             # enable rcnn models for edgeboard hw to skip the following postprocess.
             return bboxes, bboxes, bbox_num
