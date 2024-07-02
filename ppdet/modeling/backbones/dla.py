@@ -21,38 +21,126 @@ from ..shape_spec import ShapeSpec
 
 DLA_cfg = {34: ([1, 1, 1, 2, 2, 1], [16, 32, 64, 128, 256, 512]), }
 
+class ConvBN(paddle.nn.Layer):
+    def __init__(self, in_planes, out_planes, kernel_size=1, stride=1, padding=0, dilation=1, groups=1, with_bn=True):
+        super().__init__()
+        self.conv = nn.Conv2D(in_planes, out_planes, kernel_size, stride, padding, dilation, groups)
+        if with_bn:
+            self.bn = nn.BatchNorm2D(out_planes,weight_attr=nn.initializer.Constant(value=1.),bias_attr=nn.initializer.Constant(value=0.))
+    def forward(self, x):
+        x = self.conv(x)
+        if hasattr(self, 'bn'):
+            x = self.bn(x)
+        return x
+    
+    
+class DropPath(nn.Layer):
+    """DropPath class"""
+    def __init__(self, drop_prob=None):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
 
+    def drop_path(self, inputs):
+        """drop path op
+        Args:
+            input: tensor with arbitrary shape
+            drop_prob: float number of drop path probability, default: 0.0
+            training: bool, if current mode is training, default: False
+        Returns:
+            output: output tensor after drop path
+        """
+        # if prob is 0 or eval mode, return original input
+        if self.drop_prob == 0. or not self.training:
+            return inputs
+        keep_prob = 1 - self.drop_prob
+        keep_prob = paddle.to_tensor(keep_prob, dtype='float32')
+        shape = (inputs.shape[0], ) + (1, ) * (inputs.ndim - 1)  # shape=(N, 1, 1, 1)
+        random_tensor = keep_prob + paddle.rand(shape, dtype=inputs.dtype)
+        random_tensor = random_tensor.floor() # mask
+        output = inputs.divide(keep_prob) * random_tensor # divide is to keep same output expectation
+        return output
+
+    def forward(self, inputs):
+        return self.drop_path(inputs)
+
+
+# class BasicBlock(nn.Layer):
+#     def __init__(self, dim, mlp_ratio=3, drop_path=0.):
+#         super().__init__()
+#         self.dwconv = ConvBN(dim, dim, 7, 1, (7 - 1) // 2, groups=dim, with_bn=True)
+#         self.f1 = ConvBN(dim, mlp_ratio * dim, 1, with_bn=False)
+#         self.f2 = ConvBN(dim, mlp_ratio * dim, 1, with_bn=False)
+#         self.g = ConvBN(mlp_ratio * dim, dim, 1, with_bn=True)
+#         self.dwconv2 = ConvBN(dim, dim, 7, 1, (7 - 1) // 2, groups=dim, with_bn=False)
+#         self.act = nn.ReLU6()
+#         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+
+#     def forward(self, x):
+#         input = x
+#         x = self.dwconv(x)
+#         x1, x2 = self.f1(x), self.f2(x)
+#         x = self.act(x1) * x2
+#         x = self.dwconv2(self.g(x))
+#         x = input + self.drop_path(x)
+#         return x
+    
 class BasicBlock(nn.Layer):
-    def __init__(self, ch_in, ch_out, stride=1):
+    def __init__(self, ch_in, ch_out, stride=1, drop_path=0.):
         super(BasicBlock, self).__init__()
-        self.conv1 = ConvNormLayer(
-            ch_in,
-            ch_out,
-            filter_size=3,
-            stride=stride,
-            bias_on=False,
-            norm_decay=None)
-        self.conv2 = ConvNormLayer(
-            ch_out,
-            ch_out,
-            filter_size=3,
-            stride=1,
-            bias_on=False,
-            norm_decay=None)
+        self.dwconv = ConvBN(ch_in, ch_in, 7, stride, (7 - 1) // 2, groups=ch_in, with_bn=True)
+        self.f1 = ConvBN(ch_in, ch_out, stride, with_bn=False)
+        self.f2 = ConvBN(ch_in, ch_out, stride, with_bn=False)
+        self.g = ConvBN(ch_out, ch_in, stride, with_bn=True)
+        self.dwconv2 = ConvBN(ch_in, ch_out, 7, stride, (7 - 1) // 2, groups=ch_in, with_bn=False)
+        self.act = nn.ReLU6()
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
     def forward(self, inputs, residual=None):
         if residual is None:
             residual = inputs
+        
+        x = self.dwconv(inputs)
+        x1, x2 = self.f1(x), self.f2(x)
+        x = self.act(x1) * x2
+        x = self.dwconv2(self.g(x))
+        # x = inputs + self.drop_path(x)
+        
+        x = paddle.add(x=x, y=residual)
+        # out = F.relu(out)
+        
+        return x
 
-        out = self.conv1(inputs)
-        out = F.relu(out)
+# class BasicBlock(nn.Layer):
+#     def __init__(self, ch_in, ch_out, stride=1):
+#         super(BasicBlock, self).__init__()
+#         self.conv1 = ConvNormLayer(
+#             ch_in,
+#             ch_out,
+#             filter_size=3,
+#             stride=stride,
+#             bias_on=False,
+#             norm_decay=None)
+#         self.conv2 = ConvNormLayer(
+#             ch_out,
+#             ch_out,
+#             filter_size=3,
+#             stride=1,
+#             bias_on=False,
+#             norm_decay=None)
 
-        out = self.conv2(out)
+#     def forward(self, inputs, residual=None):
+#         if residual is None:
+#             residual = inputs
 
-        out = paddle.add(x=out, y=residual)
-        out = F.relu(out)
+#         out = self.conv1(inputs)
+#         out = F.relu(out)
 
-        return out
+#         out = self.conv2(out)
+
+#         out = paddle.add(x=out, y=residual)
+#         out = F.relu(out)
+
+#         return out
 
 
 class Root(nn.Layer):

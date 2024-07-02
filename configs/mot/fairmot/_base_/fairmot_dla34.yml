@@ -1,5 +1,5 @@
 architecture: FairMOT
-pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/fairmot_dla34_crowdhuman_pretrained.pdparams
+pretrain_weights: /paddle/zcd/PaddleDetection/fairmot_dla34_crowdhuman_pretrained2.pdparams
 for_mot: True
 
 FairMOT:
