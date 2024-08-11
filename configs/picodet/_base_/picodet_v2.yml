@@ -1,5 +1,7 @@
 architecture: PicoDet
 pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/LCNet_x1_5_pretrained.pdparams
+# pretrain_weights: /paddle/zcd/PaddleClas/convert_pdparams/starnet_s4.pdparams
+
 
 PicoDet:
   backbone: LCNet

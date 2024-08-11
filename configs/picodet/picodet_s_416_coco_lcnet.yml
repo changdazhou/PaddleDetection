@@ -7,6 +7,7 @@ _BASE_: [
 ]
 
 pretrain_weights: https://paddle-imagenet-models-name.bj.bcebos.com/dygraph/legendary_models/PPLCNet_x0_75_pretrained.pdparams
+pretrain_weights: /paddle/zcd/PaddleClas/convert_pdparams/starnet_s4.pdparams
 weights: output/picodet_s_416_coco/best_model
 find_unused_parameters: True
 use_ema: true

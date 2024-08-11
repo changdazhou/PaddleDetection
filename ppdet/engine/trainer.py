@@ -163,8 +163,11 @@ class Trainer(object):
                 p.numel() for n, p in self.model.named_parameters()
                 if all([x not in n for x in ['_mean', '_variance', 'aux_']])
             ])  # exclude BatchNorm running status
-            logger.info('Model Params : {} M.'.format((params / 1e6).numpy()[
-                0]))
+            try:
+                logger.info('Model Params : {} M.'.format((params / 1e6).numpy()[
+                    0]))
+            except:
+                logger.info('Model Params : {} M.'.format(params / 1e6).numpy())
 
         # build optimizer in train mode
         if self.mode == 'train':

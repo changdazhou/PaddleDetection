@@ -1,5 +1,7 @@
 architecture: FairMOT
 pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/fairmot_dla34_crowdhuman_pretrained.pdparams
+# pretrain_weights: /paddle/zcd/PaddleDetection/output_star_cen_322/best_model/model.pdparams
+# pretrain_weights: https://bj.bcebos.com/v1/paddledet/models/pretrained/DLA34_pretrain.pdparams
 for_mot: True
 
 FairMOT:
@@ -7,6 +9,22 @@ FairMOT:
   reid: FairMOTEmbeddingHead
   loss: FairMOTLoss
   tracker: JDETracker
+
+# CenterNet:
+#   backbone: StarNet
+#   neck: CenterNetDLAFPN
+#   head: CenterNetHead
+#   post_process: CenterNetPostProcess
+
+# StarNet:
+#   base_dim: 32
+#   depths: [3, 3, 12, 5]
+
+# CenterNetDLAFPN:
+#   first_level: 0
+#   last_level: 3
+#   down_ratio: 4
+#   dcn_v2: False
 
 CenterNet:
   backbone: DLA
