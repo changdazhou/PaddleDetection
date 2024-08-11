@@ -1,0 +1,41 @@
+_BASE_: [
+  'centernet_r50_140e_coco.yml'
+]
+save_dir: output/centernet_starnet_ela_140e_coco
+pretrain_weights: /paddle/zcd/PaddleClas/convert_pdparams/starnet_s4.pdparams
+weights: output/centernet_starnet_ela_140e_coco/model_final
+
+CenterNet:
+  backbone: StarNet
+  attention: ELAttentionBlock
+  neck: CenterNetDLAFPN
+  head: CenterNetHead
+  post_process: CenterNetPostProcess
+
+StarNet:
+  base_dim: 32
+  depths: [3, 3, 12, 5]
+
+ELAttentionBlock:
+  channel_list: [32, 64, 128, 256]
+
+
+CenterNetDLAFPN:
+  first_level: 0
+  last_level: 3
+  down_ratio: 4
+  dcn_v2: False
+
+CenterNetHead:
+  head_planes: 256
+  regress_ltrb: False
+
+TrainReader:
+  batch_size: 32
+
+TestReader:
+  sample_transforms:
+    - Decode: {}
+    - WarpAffine: {keep_res: False, input_h: 512, input_w: 512}
+    - NormalizeImage: {mean: [0.40789655, 0.44719303, 0.47026116], std: [0.2886383 , 0.27408165, 0.27809834]}
+    - Permute: {}

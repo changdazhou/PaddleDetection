@@ -31,6 +31,7 @@ from . import transformers
 from . import assigners
 from . import rbox_utils
 from . import ssod
+from . import attentions
 
 from .ops import *
 from .backbones import *
@@ -47,3 +48,4 @@ from .transformers import *
 from .assigners import *
 from .rbox_utils import *
 from .ssod import *
+from .attentions import *

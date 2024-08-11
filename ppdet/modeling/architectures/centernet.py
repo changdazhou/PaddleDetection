@@ -41,12 +41,14 @@ class CenterNet(BaseArch):
 
     def __init__(self,
                  backbone,
+                 attention=None,
                  neck='CenterNetDLAFPN',
                  head='CenterNetHead',
                  post_process='CenterNetPostProcess',
                  for_mot=False):
         super(CenterNet, self).__init__()
         self.backbone = backbone
+        self.attention = attention
         self.neck = neck
         self.head = head
         self.post_process = post_process
@@ -55,6 +57,8 @@ class CenterNet(BaseArch):
     @classmethod
     def from_config(cls, cfg, *args, **kwargs):
         backbone = create(cfg['backbone'])
+        
+        attention = cfg['attention'] and create(cfg['attention'], **kwargs)
 
         kwargs = {'input_shape': backbone.out_shape}
         neck = cfg['neck'] and create(cfg['neck'], **kwargs)
@@ -63,10 +67,15 @@ class CenterNet(BaseArch):
         kwargs = {'input_shape': out_shape}
         head = create(cfg['head'], **kwargs)
 
-        return {'backbone': backbone, 'neck': neck, "head": head}
+        return {'backbone': backbone, 'attention': attention, 'neck': neck, "head": head}
 
     def _forward(self):
         neck_feat = self.backbone(self.inputs)
+        # for key in neck_feat:
+        #     print(key.shape)
+        # print(neck_feat.shape)
+        if self.attention is not None:
+            neck_feat = self.attention(neck_feat)
         if self.neck is not None:
             neck_feat = self.neck(neck_feat)
         head_out = self.head(neck_feat, self.inputs)

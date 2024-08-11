@@ -18,7 +18,7 @@ import paddle.nn as nn
 import paddle.nn.functional as F
 from paddle.nn.initializer import Constant, Uniform
 from ppdet.core.workspace import register
-from ppdet.modeling.losses import CTFocalLoss, GIoULoss
+from ppdet.modeling.losses import CTFocalLoss, GIoULoss, DIouLoss, SIoULoss, EIouLoss
 
 
 class ConvLayer(nn.Layer):
@@ -214,7 +214,7 @@ class CenterNetHead(nn.Layer):
             size_loss = F.l1_loss(
                 pos_size * size_mask, size_target * size_mask, reduction='sum')
             size_loss = size_loss / (pos_num + 1e-4)
-        elif self.size_loss == 'giou':
+        else:
             size_target = inputs['bbox_xys']
             size_target.stop_gradient = True
             centers_x = (size_target[:, :, 0:1] + size_target[:, :, 2:3]) / 2.0
@@ -224,8 +224,10 @@ class CenterNetHead(nn.Layer):
             x2 = centers_x + pos_size[:, :, 2:3]
             y2 = centers_y + pos_size[:, :, 3:4]
             pred_boxes = paddle.concat([x1, y1, x2, y2], axis=-1)
-            giou_loss = GIoULoss(reduction='sum')
-            size_loss = giou_loss(
+            if self.size_loss == 'GIoU':
+                pass
+            iou_loss = getattr(self.size_loss)(reduction='sum')
+            size_loss = iou_loss(
                 pred_boxes * size_mask,
                 size_target * size_mask,
                 iou_weight=size_mask,
