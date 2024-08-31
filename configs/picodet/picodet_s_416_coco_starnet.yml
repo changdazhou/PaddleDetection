@@ -1,0 +1,49 @@
+_BASE_: [
+  '../datasets/coco_detection.yml',
+  '../runtime.yml',
+  '_base_/picodet_v2.yml',
+  '_base_/optimizer_300e.yml',
+  '_base_/picodet_416_reader.yml',
+]
+pretrain_weights: /paddle/zcd/PaddleClas/convert_pdparams/starnet_s4.pdparams
+weights: output/picodet_s_416_coco/best_model
+find_unused_parameters: True
+use_ema: true
+epoch: 300
+snapshot_epoch: 10
+
+PicoDet:
+  backbone: StarNet
+  neck: LCPAN
+  head: PicoHeadV2
+
+StarNet:
+  base_dim: 32
+  depths: [3, 3, 12, 5]
+
+LCPAN:
+  out_channels: 64
+
+PicoHeadV2:
+  conv_feat:
+    name: PicoFeat
+    feat_in: 64
+    feat_out: 64
+    num_convs: 2
+    num_fpn_stride: 4
+    norm_type: bn
+    share_cls_reg: True
+    use_se: True
+  feat_in_chan: 64
+
+TrainReader:
+  batch_size: 48
+
+LearningRate:
+  base_lr: 0.24
+  schedulers:
+  - !CosineDecay
+    max_epochs: 300
+  - !LinearWarmup
+    start_factor: 0.1
+    steps: 300

@@ -337,6 +337,26 @@ class PPHGNetV2(nn.Layer):
     """
 
     arch_configs = {
+        'B0': {
+            'stem_channels': [3, 16, 16],
+            'stage_config': {
+                # in_channels, mid_channels, out_channels, num_blocks, downsample, light_block, kernel_size, layer_num
+                "stage1": [16, 16, 64, 1, False, False, 3, 3],
+                "stage2": [64, 32, 256, 1, True, False, 3, 3],
+                "stage3": [256, 64, 512, 2, True, True, 5, 3],
+                "stage4": [512, 128, 1024, 1, True, True, 5, 3],
+            }
+        },
+        'B2': {
+            'stem_channels': [3, 16, 16],
+            'stage_config': {
+                # in_channels, mid_channels, out_channels, num_blocks, downsample, light_block, kernel_size, layer_num
+                "stage1": [32, 32, 96, 1, False, False, 3, 4],
+                "stage2": [96, 64, 384, 1, True, False, 3, 4],
+                "stage3": [384, 128, 768, 3, True, True, 5, 4],
+                "stage4": [768, 256, 1536, 1, True, True, 5, 4],
+            }
+        },
         'L': {
             'stem_channels': [3, 32, 48],
             'stage_config': {

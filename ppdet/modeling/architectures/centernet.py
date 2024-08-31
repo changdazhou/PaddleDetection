@@ -73,6 +73,7 @@ class CenterNet(BaseArch):
         neck_feat = self.backbone(self.inputs)
         # for key in neck_feat:
         #     print(key.shape)
+        # exit()
         # print(neck_feat.shape)
         if self.attention is not None:
             neck_feat = self.attention(neck_feat)

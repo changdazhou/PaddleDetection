@@ -271,6 +271,7 @@ class STrack(BaseTrack):
 
 
 def joint_stracks(tlista, tlistb):
+    # 关联已经跟踪的序列和失配序列中的具有相同轨迹id的轨迹
     exists = {}
     res = []
     for t in tlista:

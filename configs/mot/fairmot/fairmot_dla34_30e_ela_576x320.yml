@@ -1,0 +1,31 @@
+_BASE_: [
+  '../../datasets/mot.yml',
+  '../../runtime.yml',
+  '_base_/optimizer_30e.yml',
+  '_base_/fairmot_dla34.yml',
+  '_base_/fairmot_reader_576x320.yml',
+]
+
+weights: output/fairmot_dla34_30e_576x320/model_final
+save_dir: output/fairmot_starnet_ela_140e_coco
+pretrain_weights: /paddle/zcd/PaddleDetection/output/centernet_starnet_ela_140e_coco/best_model/model.pdparams
+
+CenterNet:
+  backbone: StarNet
+  attention: ELAttentionBlock
+  neck: CenterNetDLAFPN
+  head: CenterNetHead
+  post_process: CenterNetPostProcess
+
+StarNet:
+  base_dim: 32
+  depths: [3, 3, 12, 5]
+
+ELAttentionBlock:
+  channel_list: [32, 64, 128, 256]
+
+CenterNetDLAFPN:
+  first_level: 0
+  last_level: 3
+  down_ratio: 4
+  dcn_v2: False

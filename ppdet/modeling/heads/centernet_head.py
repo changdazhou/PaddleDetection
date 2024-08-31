@@ -172,6 +172,9 @@ class CenterNetHead(nn.Layer):
         heatmap_target = inputs['heatmap']
         heatmap = paddle.clip(heatmap, 1e-4, 1 - 1e-4)
         ctfocal_loss = CTFocalLoss()
+        # print(heatmap_target.shape)
+        # print(heatmap.shape)
+        # exit()
         heatmap_loss = ctfocal_loss(heatmap, heatmap_target)
 
         # 2.size(wh) head loss: L1 loss or GIoU loss

@@ -1,0 +1,41 @@
+_BASE_: [
+  'centernet_r50_140e_coco.yml'
+]
+save_dir: output/centernet_hgnetv2_140e_coco
+pretrain_weights: https://paddle-imagenet-models-name.bj.bcebos.com/dygraph/legendary_models/PPHGNetV2_B0_ssld_pretrained.pdparams
+weights: output/centernet_hgnetv2_140e_coco/model_final
+
+CenterNet:
+  backbone: PPHGNetV2
+  neck: CenterNetDLAFPN
+  head: CenterNetHead
+  post_process: CenterNetPostProcess
+
+PPHGNetV2:
+  arch: 'B0'
+  return_idx: [1, 2, 3]
+  freeze_stem_only: True
+  freeze_at: 0
+  freeze_norm: True
+  lr_mult_list: [0., 0.05, 0.05, 0.05, 0.05]
+
+
+CenterNetDLAFPN:
+  first_level: 0
+  last_level: 3
+  down_ratio: 4
+  dcn_v2: False
+
+CenterNetHead:
+  head_planes: 256
+  regress_ltrb: False
+
+TrainReader:
+  batch_size: 32
+
+TestReader:
+  sample_transforms:
+    - Decode: {}
+    - WarpAffine: {keep_res: False, input_h: 512, input_w: 512}
+    - NormalizeImage: {mean: [0.40789655, 0.44719303, 0.47026116], std: [0.2886383 , 0.27408165, 0.27809834]}
+    - Permute: {}

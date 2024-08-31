@@ -1,0 +1,20 @@
+_BASE_: [
+  '../datasets/coco_detection.yml',
+  '../runtime.yml',
+  '_base_/optimizer_140e.yml',
+  '_base_/centernet_dla34.yml',
+  '_base_/centernet_reader.yml',
+]
+save_dir: output/centernet_dla34_cbam_140e_coco
+weights: output/centernet_dla34_cbam_140e_coco/model_final
+
+CenterNet:
+  backbone: DLA
+  attention: CBAMAttentionBlock
+  neck: CenterNetDLAFPN
+  head: CenterNetHead
+  post_process: CenterNetPostProcess
+
+CBAMAttentionBlock:
+  channel_list: [16, 32, 64, 128]
+

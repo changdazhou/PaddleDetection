@@ -138,6 +138,7 @@ class JDETracker(object):
 
         # unify single and multi classes detection and embedding results
         for cls_id in range(self.num_classes):
+            # 取出类别标签
             cls_idx = (pred_dets[:, 0:1] == cls_id).squeeze(-1)
             pred_dets_dict[cls_id] = pred_dets[cls_idx]
             if pred_embs is not None:
@@ -145,10 +146,13 @@ class JDETracker(object):
             else:
                 pred_embs_dict[cls_id] = None
 
+        # 遍历所有类别
         for cls_id in range(self.num_classes):
             """ Step 1: Get detections by class"""
+            # 取出每个类别的结果
             pred_dets_cls = pred_dets_dict[cls_id]
             pred_embs_cls = pred_embs_dict[cls_id]
+            # 取出score大于阈值的结果
             remain_inds = (pred_dets_cls[:, 1:2] > self.conf_thres).squeeze(-1)
             if remain_inds.sum() > 0:
                 pred_dets_cls = pred_dets_cls[remain_inds]

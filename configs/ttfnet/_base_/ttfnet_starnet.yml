@@ -1,0 +1,53 @@
+architecture: TTFNet
+pretrain_weights: /paddle/zcd/PaddleClas/convert_pdparams/starnet_s4.pdparams
+
+TTFNet:
+  backbone: StarNet
+  neck: CenterNetDLAFPN
+  ttf_head: TTFHead
+  post_process: BBoxPostProcess
+
+# DarkNet:
+#   depth: 53
+#   freeze_at: 0
+#   return_idx: [1, 2, 3, 4]
+#   norm_type: bn
+#   norm_decay: 0.0004
+
+# TTFFPN:
+#   planes: [256, 128, 64]
+#   shortcut_num: [3, 2, 1]
+
+TTFHead:
+  hm_loss:
+    name: CTFocalLoss
+    loss_weight: 1.
+  wh_loss:
+    name: GIoULoss
+    loss_weight: 5.
+    reduction: sum
+
+BBoxPostProcess:
+  decode:
+    name: TTFBox
+    max_per_img: 100
+    score_thresh: 0.01
+    down_ratio: 4
+
+
+# CenterNet:
+#   backbone: StarNet
+#   neck: CenterNetDLAFPN
+#   head: CenterNetHead
+#   post_process: CenterNetPostProcess
+
+StarNet:
+  base_dim: 32
+  depths: [3, 3, 12, 5]
+
+
+CenterNetDLAFPN:
+  first_level: 0
+  last_level: 3
+  down_ratio: 4
+  dcn_v2: False

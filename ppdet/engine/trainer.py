@@ -167,7 +167,7 @@ class Trainer(object):
                 logger.info('Model Params : {} M.'.format((params / 1e6).numpy()[
                     0]))
             except:
-                logger.info('Model Params : {} M.'.format(params / 1e6).numpy())
+                logger.info('Model Params : {} M.'.format((params / 1e6).numpy()))
 
         # build optimizer in train mode
         if self.mode == 'train':
