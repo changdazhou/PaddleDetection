@@ -53,23 +53,93 @@ class BasicBlock(nn.Layer):
         out = F.relu(out)
 
         return out
+    
+def drop_path(x, drop_prob=0., training=False):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ...
+    """
+    if drop_prob == 0. or not training:
+        return x
+    keep_prob = paddle.full(shape=[], fill_value=1 - drop_prob, dtype=x.dtype)
+    shape = (x.shape[0], ) + (1, ) * (x.ndim - 1)
+    random_tensor = keep_prob + paddle.rand(shape).astype(x.dtype)
+    random_tensor = paddle.floor(random_tensor)  # binarize
+    output = x.divide(keep_prob) * random_tensor
+    return output
+
+class DropPath(nn.Layer):
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
+    """
+
+    def __init__(self, drop_prob=None):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x):
+        return drop_path(x, self.drop_prob, self.training)
+
+class ConvBN(paddle.nn.Sequential):
+    def __init__(self, in_planes, out_planes, kernel_size=1, stride=1,
+        padding=0, dilation=1, groups=1, with_bn=True):
+        super().__init__()
+        self.add_sublayer(name='conv', sublayer=paddle.nn.Conv2D(
+            in_channels=in_planes, out_channels=out_planes, kernel_size=
+            kernel_size, stride=stride, padding=padding, dilation=dilation,
+            groups=groups))
+        if with_bn:
+            self.add_sublayer(name='bn', sublayer=paddle.nn.BatchNorm2D(
+                num_features=out_planes))
+            init_Constant = paddle.nn.initializer.Constant(value=1)
+            init_Constant(self.bn.weight)
+            init_Constant = paddle.nn.initializer.Constant(value=0)
+            init_Constant(self.bn.bias)
+    
+class StarBasic(nn.Layer):
+    def __init__(self, inplanes, planes, stride=1, dilation=1,mlp_ratio=3, drop_path=0.1, **cargs):
+        super(StarBasic, self).__init__()
+        self.dwconv = ConvBN(inplanes, inplanes, 7, 1, (7 - 1) // 2, groups=inplanes,
+            with_bn=True)
+        self.f1 = ConvBN(inplanes, mlp_ratio * inplanes, 1, with_bn=False)
+        self.f2 = ConvBN(inplanes, mlp_ratio * inplanes, 1, with_bn=False)
+        self.g = ConvBN(mlp_ratio * inplanes, inplanes, 1, with_bn=True)
+        self.dwconv2 = ConvBN(inplanes, inplanes, 7, 1, (7 - 1) // 2, groups=inplanes,
+            with_bn=False)
+        self.act = paddle.nn.ReLU6()
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else paddle.nn.Identity()
+        self.convbn = ConvBN(inplanes,planes,kernel_size=3,stride=stride,padding=dilation,dilation=dilation,with_bn=True)
+
+    def forward(self, x,residual=None):
+        if residual is None:
+            residual = x
+        input = x
+        x = self.dwconv(x)
+        x1, x2 = self.f1(x), self.f2(x)
+        x = self.act(x1) * x2
+        x = self.dwconv2(self.g(x))
+        x = input + self.drop_path(x)
+        x = self.convbn(x)
+        x = x + residual
+        return x
 
 
 class Root(nn.Layer):
     def __init__(self, ch_in, ch_out, kernel_size, residual):
         super(Root, self).__init__()
-        self.conv = ConvNormLayer(
+        self.conv = nn.Conv2D(
             ch_in,
             ch_out,
-            filter_size=1,
+            1,
             stride=1,
-            bias_on=False,
-            norm_decay=None)
+            bias_attr=False,
+            padding=(kernel_size - 1) // 2)
+        self.bn = nn.BatchNorm2D(ch_out)
         self.residual = residual
 
     def forward(self, inputs):
         children = inputs
         out = self.conv(paddle.concat(inputs, axis=1))
+        out = self.bn(out)
         if self.residual:
             out = paddle.add(x=out, y=children[0])
         out = F.relu(out)
@@ -126,13 +196,14 @@ class Tree(nn.Layer):
         if stride > 1:
             self.downsample = nn.MaxPool2D(stride, stride=stride)
         if ch_in != ch_out:
-            self.project = ConvNormLayer(
-                ch_in,
-                ch_out,
-                filter_size=1,
-                stride=1,
-                bias_on=False,
-                norm_decay=None)
+            self.project = nn.Sequential(
+                    nn.Conv2D(
+                        ch_in,
+                        ch_out,
+                        kernel_size=1,
+                        stride=1,
+                        bias_attr=False),
+                    nn.BatchNorm2D(ch_out))
 
     def forward(self, x, residual=None, children=None):
         children = [] if children is None else children
@@ -165,25 +236,29 @@ class DLA(nn.Layer):
 
     def __init__(self,
                  depth=34,
+                 block="BasicBlock",
                  residual_root=False,
                  pre_img=False,
                  pre_hm=False):
         super(DLA, self).__init__()
         assert depth == 34, 'Only support DLA with depth of 34 now.'
-        if depth == 34:
+        if block == "BasicBlock":
             block = BasicBlock
+        elif block == "StarBasic":
+            block = StarBasic
         levels, channels = DLA_cfg[depth]
         self.channels = channels
         self.num_levels = len(levels)
 
         self.base_layer = nn.Sequential(
-            ConvNormLayer(
+            nn.Conv2D(
                 3,
                 channels[0],
-                filter_size=7,
+                kernel_size=7,
                 stride=1,
-                bias_on=False,
-                norm_decay=None),
+                padding=3,
+                bias_attr=False),
+            nn.BatchNorm2D(channels[0]),
             nn.ReLU())
         self.level0 = self._make_conv_level(channels[0], channels[0], levels[0])
         self.level1 = self._make_conv_level(
@@ -248,13 +323,13 @@ class DLA(nn.Layer):
         modules = []
         for i in range(conv_num):
             modules.extend([
-                ConvNormLayer(
+                nn.Conv2D(
                     ch_in,
                     ch_out,
-                    filter_size=3,
+                    kernel_size=3,
+                    padding=1,
                     stride=stride if i == 0 else 1,
-                    bias_on=False,
-                    norm_decay=None), nn.ReLU()
+                    bias_attr=False), nn.BatchNorm2D(ch_out), nn.ReLU(),
             ])
             ch_in = ch_out
         return nn.Sequential(*modules)
