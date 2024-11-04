@@ -14,11 +14,11 @@ CenterNetHead:
   head_planes: 256
   prior_bias: -2.19
   regress_ltrb: True
-  size_loss: 'L1'
-  loss_weight: {'heatmap': 1.0, 'size': 0.1, 'offset': 1.0, 'iou': 0.0}
+  size_loss: 'SIoULoss'
+  loss_weight: {'heatmap': 1.0, 'size': 10.0, 'offset': 1.0, 'iou': 0.1}
   add_iou: False
 
-weights: output/fairmot_dla34_30e_576x320/model_final
-save_dir: output/fairmot_dla34_30e_576x320
-pretrain_weights: /paddle/zcd/PaddleDetection/best_model.pdparams
+weights: output/fairmot_dla34_30e_576x320_siou/model_final
+save_dir: output/fairmot_dla34_30e_576x320_siou
+pretrain_weights: /paddle/zcd/PaddleClas/dla_star_752/best_model.pdparams
 # pretrain_weights: model_final.pdparams

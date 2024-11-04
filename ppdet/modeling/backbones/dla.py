@@ -96,7 +96,7 @@ class ConvBN(paddle.nn.Sequential):
             init_Constant(self.bn.bias)
     
 class StarBasic(nn.Layer):
-    def __init__(self, inplanes, planes, stride=1, dilation=1,mlp_ratio=3, drop_path=0.1, **cargs):
+    def __init__(self, inplanes, planes, stride=1, dilation=1,mlp_ratio=3, drop_path=0, **cargs):
         super(StarBasic, self).__init__()
         self.dwconv = ConvBN(inplanes, inplanes, 7, 1, (7 - 1) // 2, groups=inplanes,
             with_bn=True)

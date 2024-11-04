@@ -136,8 +136,10 @@ class Tracker(object):
             load_weight(self.model.detector, det_weights)
             if with_reid:
                 load_weight(self.model.reid, reid_weights)
-        else:
+        elif with_reid:
             load_weight(self.model.reid, reid_weights)
+        else:
+            pass
 
     def _eval_seq_centertrack(self,
                               dataloader,
@@ -433,7 +435,7 @@ class Tracker(object):
 
             elif isinstance(tracker, OCSORTTracker):
                 # OC_SORT Tracker
-                online_targets = tracker.update(pred_dets_old, pred_embs)
+                online_targets = tracker.update(pred_dets, pred_embs)
                 online_tlwhs = []
                 online_ids = []
                 online_scores = []
@@ -456,7 +458,7 @@ class Tracker(object):
             elif isinstance(tracker, BOTSORTTracker):
                 # BOTSORT Tracker
                 online_targets = tracker.update(
-                    pred_dets_old, img=ori_image.numpy())
+                    pred_dets, img=ori_image.numpy())
                 online_tlwhs = []
                 online_ids = []
                 online_scores = []

@@ -7,5 +7,13 @@ _BASE_: [
 ]
 
 weights: output/fairmot_dla34_30e_1088x608/model_final
-save_dir: output/fairmot_dla34_30e_1088x608
+save_dir: output/fairmot_dla34_30e_1088x608_diou
 # pretrain_weights: /paddle/zcd/PaddleClas/dla_star_752/best_model.pdparams
+
+CenterNetHead:
+  head_planes: 256
+  prior_bias: -2.19
+  regress_ltrb: True
+  size_loss: 'DIoULoss'
+  loss_weight: {'heatmap': 1.0, 'size': 1.0, 'offset': 1.0, 'iou': 0.0}
+  add_iou: False

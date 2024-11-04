@@ -1,0 +1,3 @@
+#python -u -m paddle.distributed.launch --gpus='0,1,2,3,4,5,6,7' --log_dir=./output/fairmot_dla34_30e_1088x608_star_diou/distributed_train_logs tools/train.py --config /paddle/zcd/PaddleDetection/configs/mot/fairmot/fairmot_dla34_30e_1088x608_star_diou.yml
+#python -u -m paddle.distributed.launch --gpus='0,1,2,3,4,5,6,7' --log_dir=./output/fairmot_dla34_30e_1088x608_star_eiou/distributed_train_logs tools/train.py --config /paddle/zcd/PaddleDetection/configs/mot/fairmot/fairmot_dla34_30e_1088x608_star_eiou.yml
+python -u -m paddle.distributed.launch --gpus='0,1,2,3,4,5,6,7' --log_dir=./output/fairmot_dla34_30e_1088x608_star/distributed_train_logs tools/train.py --config /paddle/zcd/PaddleDetection/configs/mot/fairmot/fairmot_dla34_30e_1088x608_star.yml

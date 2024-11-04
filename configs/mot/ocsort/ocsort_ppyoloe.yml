@@ -1,6 +1,6 @@
 # This config is an assembled config for ByteTrack MOT, used as eval/infer mode for MOT.
 _BASE_: [
-  '../bytetrack/detector/ppyoloe_crn_l_36e_640x640_mot17half.yml',
+  # '../bytetrack/detector/ppyoloe_crn_l_36e_640x640_mot17half.yml',
   '../bytetrack/_base_/mot17.yml',
   '../bytetrack/_base_/ppyoloe_mot_reader_640x640.yml'
 ]
@@ -14,7 +14,7 @@ num_classes: 1
 architecture: ByteTrack
 pretrain_weights: https://bj.bcebos.com/v1/paddledet/models/ppyoloe_crn_l_300e_coco.pdparams
 ByteTrack:
-  detector: YOLOv3 # PPYOLOe version
+  detector: None # PPYOLOe version
   reid: None
   tracker: OCSORTTracker
 det_weights: https://bj.bcebos.com/v1/paddledet/models/mot/ppyoloe_crn_l_36e_640x640_mot17half.pdparams
@@ -62,13 +62,19 @@ OCSORTTracker:
   use_byte: False
   use_angle_cost: False
 
-
-# MOTDataset for MOT evaluation and inference
 EvalMOTDataset:
   !MOTImageFolder
     dataset_dir: dataset/mot
-    data_root: MOT17/images/half
-    keep_ori_im: True # set as True in DeepSORT and ByteTrack
+    data_root: MOT16/images/train
+    keep_ori_im: True # set True if save visualization images or video, or used in DeepSORT
+
+
+# # MOTDataset for MOT evaluation and inference
+# EvalMOTDataset:
+#   !MOTImageFolder
+#     dataset_dir: dataset/mot
+#     data_root: MOT17/images/half
+#     keep_ori_im: True # set as True in DeepSORT and ByteTrack
 
 TestMOTDataset:
   !MOTImageFolder

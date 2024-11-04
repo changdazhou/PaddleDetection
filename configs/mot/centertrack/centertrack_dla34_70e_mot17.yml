@@ -6,7 +6,7 @@ _BASE_: [
 ]
 log_iter: 20
 snapshot_epoch: 5
-weights: output/centertrack_dla34_70e_mot17/model_final
+weights: centertrack_dla34_70e_mot17
 pretrain_weights: https://bj.bcebos.com/v1/paddledet/models/pretrained/crowdhuman_centertrack.pdparams
 
 
@@ -40,11 +40,17 @@ TrainDataset:
     data_fields: ['image', 'gt_bbox', 'gt_class', 'is_crowd', 'gt_track_id']
     # add 'gt_track_id', the boxes annotations of json file should have 'gt_track_id'
 
-EvalDataset:
-  !COCODataSet
-    dataset_dir: dataset/mot/MOT17
-    anno_path: annotations/val_half.json
-    image_dir: images/train
+EvalMOTDataset:
+  !MOTImageFolder
+    dataset_dir: dataset/mot
+    data_root: MOT16/images/train
+    keep_ori_im: True # set True if save visualization images or video, or used in DeepSORT
+
+# EvalDataset:
+#   !COCODataSet
+#     dataset_dir: dataset/mot/MOT17
+#     anno_path: annotations/val_half.json
+#     image_dir: images/train
 
 TestDataset:
   !ImageFolder

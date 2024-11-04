@@ -7,5 +7,9 @@ _BASE_: [
 ]
 
 weights: output/fairmot_dla34_30e_1088x608/model_final
-save_dir: output/fairmot_dla34_30e_1088x608
-# pretrain_weights: /paddle/zcd/PaddleClas/dla_star_752/best_model.pdparams
+save_dir: output/fairmot_dla34_30e_1088x608_star
+pretrain_weights: /paddle/zcd/PaddleClas/dla_star_752/best_model.pdparams
+
+DLA:
+  depth: 34
+  block: StarBasic

@@ -85,3 +85,9 @@ BBoxPostProcess:
     score_threshold: 0.3 # 0.01 in original detector
     nms_threshold: 0.45
     nms_top_k: 1000
+
+EvalMOTDataset:
+  !MOTImageFolder
+    dataset_dir: dataset/mot
+    data_root: MOT16/images/train
+    keep_ori_im: True

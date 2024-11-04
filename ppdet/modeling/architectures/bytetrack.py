@@ -45,7 +45,11 @@ class ByteTrack(BaseArch):
 
     @classmethod
     def from_config(cls, cfg, *args, **kwargs):
-        detector = create(cfg['detector'])
+        # detector = create(cfg['detector'])
+        if cfg['detector'] != 'None':
+            detector = create(cfg['detector'])
+        else:
+            detector = None
 
         if cfg['reid'] != 'None':
             reid = create(cfg['reid'])
