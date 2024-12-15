@@ -1,0 +1,23 @@
+_BASE_: [
+  '../../datasets/mot.yml',
+  '../../runtime.yml',
+  '_base_/optimizer_30e.yml',
+  '_base_/fairmot_dla34.yml',
+  '_base_/fairmot_reader_1088x608.yml',
+]
+
+weights: output/fairmot_dla34_30e_1088x608/model_final
+
+
+FairMOT:
+  detector: CenterNet
+  reid: FairMOTEmbeddingHead
+  loss: FairMOTLoss
+  tracker: JDEOCTracker
+
+JDEOCTracker:
+  conf_thres: 0.4
+  tracked_thresh: 0.4
+  metric_type: cosine
+  min_box_area: 200
+  vertical_ratio: 1.6 # for pedestrian

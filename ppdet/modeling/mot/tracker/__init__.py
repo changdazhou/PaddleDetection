@@ -28,3 +28,4 @@ from .deepsort_tracker import *
 from .ocsort_tracker import *
 from .botsort_tracker import *
 from .center_tracker import *
+from .jde_oc_tracker import *

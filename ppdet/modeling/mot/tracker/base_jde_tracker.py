@@ -18,8 +18,12 @@ This code is based on https://github.com/Zhongdao/Towards-Realtime-MOT/blob/mast
 import numpy as np
 from collections import defaultdict
 from collections import deque, OrderedDict
-from ..matching import jde_matching as matching
+from ..matching import jdeoc_matching as matching
+from ..motion import KalmanFilter
+from ..motion.kalman_filter import OCKalmanFilter
 from ppdet.core.workspace import register, serializable
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.gaussian_process import GaussianProcessRegressor as GPR
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -108,6 +112,8 @@ class STrack(BaseTrack):
         self.score = score
         self.cls_id = cls_id
         self.track_len = 0
+        self._history = OrderedDict()
+        self.velocitie = np.zeros(2)
 
         self.kalman_filter = None
         self.mean, self.covariance = None, None
@@ -147,7 +153,15 @@ class STrack(BaseTrack):
                 [track.covariance for track in tracks])
             for i, st in enumerate(tracks):
                 if st.state != TrackState.Tracked:
-                    multi_mean[i][7] = 0
+                    if isinstance(kalman_filter,OCKalmanFilter):
+                        if multi_mean[i][6] + multi_mean[i][2] < 0:
+                            multi_mean[i][6] = 0
+                    elif isinstance(kalman_filter,KalmanFilter):
+                        multi_mean[i][7] = 0
+                    else:
+                        raise ValueError("Kalman filter must be either a "
+                                         "KalmanFilter instance or a subclass "
+                                         "of it.")
             multi_mean, multi_covariance = kalman_filter.multi_predict(
                 multi_mean, multi_covariance)
             for i, (mean, cov) in enumerate(zip(multi_mean, multi_covariance)):
@@ -180,8 +194,12 @@ class STrack(BaseTrack):
         self.kalman_filter = kalman_filter
         # update track id for the object class
         self.track_id = self.next_id(self.cls_id)
-        self.mean, self.covariance = self.kalman_filter.initiate(
-            self.tlwh_to_xyah(self._tlwh))
+        if isinstance(self.kalman_filter,OCKalmanFilter):
+            self.mean, self.covariance = self.kalman_filter.initiate(
+                self.tlwh_to_xysr(self._tlwh))
+        elif isinstance(self.kalman_filter,KalmanFilter):
+            self.mean, self.covariance = self.kalman_filter.initiate(
+                self.tlwh_to_xyah(self._tlwh))
 
         self.track_len = 0
         self.state = TrackState.Tracked  # set flag 'tracked'
@@ -191,10 +209,104 @@ class STrack(BaseTrack):
 
         self.frame_id = frame_id
         self.start_frame = frame_id
+        self.update_history()
 
-    def re_activate(self, new_track, frame_id, new_id=False):
-        self.mean, self.covariance = self.kalman_filter.update(
-            self.mean, self.covariance, self.tlwh_to_xyah(new_track.tlwh))
+    def re_activate(self, new_track, frame_id, new_id=False, interpolation='linear'):
+        time_gap = frame_id - self.frame_id
+        if interpolation == 'linear' and time_gap > 20:
+            ## 线性插值
+            box_1 = self.tlwh
+            x1,y1,w1,h1 = box_1
+            box_2 = new_track.tlwh
+            x2,y2,w2,h2 = box_2
+            dx = (x2-x1)/time_gap
+            dy = (y2-y1)/time_gap
+            dw = (w2-w1)/time_gap
+            dh = (h2-h1)/time_gap
+
+            
+            for i in range(time_gap):
+                x1+=dx
+                y1+=dy
+                w1+=dw
+                h1+=dh
+                new_box = np.array((x1,y1,w1,h1),dtype=np.float32)
+                # print(new_box)
+                if isinstance(self.kalman_filter,OCKalmanFilter):
+                    self.mean, self.covariance = self.kalman_filter.update(
+                        self.mean, self.covariance, self.tlwh_to_xysr(new_box))
+                elif isinstance(self.kalman_filter,KalmanFilter):
+                    self.mean, self.covariance = self.kalman_filter.update(
+                        self.mean, self.covariance, self.tlwh_to_xyah(new_box))
+        elif interpolation == 'gaussian':
+            tau = 10
+            fid_list = list(self._history.keys())
+            # print(frame_id)
+            t = [self._history[fid][0] for fid in self._history.keys()]
+            l = [self._history[fid][1] for fid in self._history.keys()]
+            w = [self._history[fid][2] for fid in self._history.keys()]
+            h = [self._history[fid][3] for fid in self._history.keys()]
+            fid_list.append(frame_id)
+            t.append(new_track.tlwh[0])
+            l.append(new_track.tlwh[1])
+            w.append(new_track.tlwh[2])
+            h.append(new_track.tlwh[3])
+            fid_list = np.array(fid_list).reshape(-1, 1)
+            # t = np.array(t).reshape(-1, 1)
+            # l = np.array(l).reshape(1, -1)
+            # w = np.array(w).reshape(1, -1)
+            # h = np.array(h).reshape(1, -1)
+            len_scale = np.clip(tau * np.log(tau ** 3 / len(fid_list)+1), tau ** -1, tau ** 2)
+            time_gap = frame_id - self.frame_id -1
+            pred_frame_id = np.arange(self.frame_id+1, frame_id).reshape(-1, 1)
+            gpr = GPR(RBF(len_scale, 'fixed'))
+            # print(fid_list)
+            # print(pred_frame_id)
+            gpr.fit(fid_list, t)
+            tt = gpr.predict(pred_frame_id)
+            # print(t)
+            # print(tt)
+            gpr.fit(fid_list, l)
+            ll = gpr.predict(pred_frame_id)
+            gpr.fit(fid_list, w)
+            ww = gpr.predict(pred_frame_id)
+            gpr.fit(fid_list, h)
+            hh = gpr.predict(pred_frame_id)
+            print("*"*100)
+            print(self.tlwh)
+            print(self.mean)
+            print(new_track.tlwh)
+            print("*"*100)
+            # print(time_gap)
+            for i in range(time_gap):
+                # print(i)
+                new_tlwh = np.array((tt[i],ll[i],ww[i],hh[i]),dtype=np.float32)
+                print(new_tlwh)
+                if isinstance(self.kalman_filter,OCKalmanFilter):
+                    self.mean, self.covariance = self.kalman_filter.update(
+                        self.mean, self.covariance, self.tlwh_to_xysr(new_tlwh))
+                elif isinstance(self.kalman_filter,KalmanFilter):
+                    self.mean, self.covariance = self.kalman_filter.update(
+                        self.mean, self.covariance, self.tlwh_to_xyah(new_tlwh))
+                # print(new_box)
+            # print(new_track.tlwh)
+            # exit()
+                
+            
+            
+            if isinstance(self.kalman_filter,OCKalmanFilter):
+                self.mean, self.covariance = self.kalman_filter.update(
+                    self.mean, self.covariance, self.tlwh_to_xysr(new_track.tlwh))
+            elif isinstance(self.kalman_filter,KalmanFilter):
+                self.mean, self.covariance = self.kalman_filter.update(
+                    self.mean, self.covariance, self.tlwh_to_xyah(new_track.tlwh))
+        else:
+            if isinstance(self.kalman_filter,OCKalmanFilter):
+                self.mean, self.covariance = self.kalman_filter.update(
+                    self.mean, self.covariance, self.tlwh_to_xysr(new_track.tlwh))
+            elif isinstance(self.kalman_filter,KalmanFilter):
+                self.mean, self.covariance = self.kalman_filter.update(
+                    self.mean, self.covariance, self.tlwh_to_xyah(new_track.tlwh))
         if self.use_reid:
             self.update_features(new_track.curr_feat)
         self.track_len = 0
@@ -209,14 +321,27 @@ class STrack(BaseTrack):
         self.track_len += 1
 
         new_tlwh = new_track.tlwh
-        self.mean, self.covariance = self.kalman_filter.update(
-            self.mean, self.covariance, self.tlwh_to_xyah(new_tlwh))
+        self.update_velocitie(new_tlwh)
+        if isinstance(self.kalman_filter,OCKalmanFilter):
+            self.mean, self.covariance = self.kalman_filter.update(
+                self.mean, self.covariance, self.tlwh_to_xysr(new_tlwh))
+        elif isinstance(self.kalman_filter,KalmanFilter):
+            self.mean, self.covariance = self.kalman_filter.update(
+                self.mean, self.covariance, self.tlwh_to_xyah(new_tlwh))
         self.state = TrackState.Tracked  # set flag 'tracked'
         self.is_activated = True  # set flag 'activated'
+        self.update_history()
 
         self.score = new_track.score
         if update_feature and self.use_reid:
             self.update_features(new_track.curr_feat)
+            
+    def update_history(self):
+        self._history[self.frame_id]=(self.tlwh)
+        
+        
+    def update_velocitie(self,new_box):
+        self.velocity = matching.speed_direction(self.tlwh,new_box)
 
     @property
     def tlwh(self):
@@ -227,8 +352,15 @@ class STrack(BaseTrack):
             return self._tlwh.copy()
 
         ret = self.mean[:4].copy()
-        ret[2] *= ret[3]
-        ret[:2] -= ret[2:] / 2
+        if isinstance(self.kalman_filter,OCKalmanFilter):
+            w = np.sqrt(ret[2] * ret[3])
+            h = ret[2] / w + 1e-6
+            ret[3] = h
+            ret[2] = w 
+            ret[:2] -= ret[2:] / 2
+        elif isinstance(self.kalman_filter,KalmanFilter):
+            ret[2] *= ret[3]
+            ret[:2] -= ret[2:] / 2
         return ret
 
     @property
@@ -249,6 +381,18 @@ class STrack(BaseTrack):
         ret[:2] += ret[2:] / 2
         ret[2] /= ret[3]
         return ret
+    
+    @staticmethod
+    def tlwh_to_xysr(tlwh):
+        ret = np.asarray(tlwh).copy()
+        ret[:2] += ret[2:] / 2
+        ret[2] *= ret[3]
+        ret[3] = ret[2]/(ret[3]*ret[3]+1e-6)
+        return ret
+    
+    def to_xysr(self):
+        return self.tlwh_to_xysr(self.tlwh)
+        
 
     def to_xyah(self):
         return self.tlwh_to_xyah(self.tlwh)
