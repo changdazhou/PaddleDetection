@@ -5,8 +5,13 @@ num_classes: 1
 TrainDataset:
   !MOTDataSet
     dataset_dir: dataset/mot
+<<<<<<< HEAD
     # image_lists: ['crowdhuman.train']
     image_lists: ['mot17.train', 'caltech.all', 'cuhksysu.train', 'prw.train', 'citypersons.train', 'eth.train']
+=======
+    # image_lists: ['mot17.train', 'caltech.all', 'cuhksysu.train', 'prw.train', 'citypersons.train', 'eth.train']
+    image_lists: ['mot17.half']
+>>>>>>> 8cc503c1c... matching
     data_fields: ['image', 'gt_bbox', 'gt_class', 'gt_ide']
 
 # for MOT evaluation

@@ -575,6 +575,9 @@ class Tracker(object):
             for metric in self._metrics:
                 metric.update(data_root, seq, data_type, result_root,
                               result_filename)
+                metric.accumulate()
+                metric.log()
+            # exit()
 
         timer_avgs = np.asarray(timer_avgs)
         timer_calls = np.asarray(timer_calls)
