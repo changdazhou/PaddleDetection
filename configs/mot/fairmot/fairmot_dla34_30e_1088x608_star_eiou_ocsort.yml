@@ -1,0 +1,39 @@
+_BASE_: [
+  '../../datasets/mot.yml',
+  '../../runtime.yml',
+  '_base_/optimizer_30e.yml',
+  '_base_/fairmot_dla34.yml',
+  '_base_/fairmot_reader_1088x608.yml',
+]
+weights: output/fairmot_dla34_30e_1088x608/model_final
+save_dir: output/fairmot_dla34_30e_1088x608_star_eiou
+pretrain_weights: /paddle/zcd/PaddleClas/dla_star_752/best_model.pdparams
+
+FairMOT:
+  detector: CenterNet
+  reid: FairMOTEmbeddingHead
+  loss: FairMOTLoss
+  tracker: OCSORTTracker
+
+CenterNetHead:
+  head_planes: 256
+  prior_bias: -2.19
+  regress_ltrb: True
+  size_loss: 'EIoULoss'
+  loss_weight: {'heatmap': 1.0, 'size': 1.0, 'offset': 1.0, 'iou': 0.0}
+  add_iou: False
+
+DLA:
+  depth: 34
+  block: StarBasic
+
+OCSORTTracker:
+  det_thresh: 0.6
+  max_age: 30
+  min_hits: 3
+  iou_threshold: 0.3
+  delta_t: 3
+  inertia: 0.2
+  vertical_ratio: 1.6
+  min_box_area: 100
+  use_byte: False
