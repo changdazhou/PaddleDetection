@@ -5,17 +5,17 @@ TrainDataset:
   name: COCODataSet
   image_dir: images
   anno_path: annotations/instance_train.json
-  dataset_dir: dataset/coco
+  dataset_dir: /paddle/dataset/visdrone_mcmot
   data_fields: ['image', 'gt_bbox', 'gt_class', 'is_crowd']
 
 EvalDataset:
   name: COCODataSet
   image_dir: images
   anno_path: annotations/instance_val.json
-  dataset_dir: dataset/coco
+  dataset_dir: /paddle/dataset/visdrone_mcmot
   allow_empty: true
 
 TestDataset:
   name: ImageFolder
   anno_path: annotations/instance_val.json # also support txt (like VOC's label_list.txt)
-  dataset_dir: dataset/coco # if set, anno_path will be 'dataset_dir/anno_path'
+  dataset_dir: /paddle/dataset/visdrone_mcmot # if set, anno_path will be 'dataset_dir/anno_path'

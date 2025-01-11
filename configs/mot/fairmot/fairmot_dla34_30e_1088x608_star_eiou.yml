@@ -21,3 +21,11 @@ CenterNetHead:
 DLA:
   depth: 34
   block: StarBasic
+
+
+# MOTDataset for MOT evaluation and inference
+EvalMOTDataset:
+  !MOTImageFolder
+    dataset_dir: dataset/mot
+    data_root: MOT17/images/half
+    keep_ori_im: True # set as True in DeepSORT and ByteTrack
