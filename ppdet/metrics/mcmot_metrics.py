@@ -318,8 +318,9 @@ class MCMOTEvaluator(object):
 
     def load_annotations(self):
         assert self.data_type == 'mcmot'
-        self.gt_filename = os.path.join(self.data_root, '../', 'sequences',
+        self.gt_filename = os.path.join(self.data_root, '../../', 'sequences',
                                         '{}.txt'.format(self.seq_name))
+        self.gt_filename = f"/paddle/zcd/PaddleDetection/dataset/mot/visdrone_mcmot/sequences/{self.seq_name}.txt"
         if not os.path.exists(self.gt_filename):
             logger.warning(
                 "gt_filename '{}' of MCMOTEvaluator is not exist, so the MOTA will be -INF."

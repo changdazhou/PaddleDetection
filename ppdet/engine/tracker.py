@@ -577,7 +577,6 @@ class Tracker(object):
                               result_filename)
                 metric.accumulate()
                 metric.log()
-            # exit()
 
         timer_avgs = np.asarray(timer_avgs)
         timer_calls = np.asarray(timer_calls)
