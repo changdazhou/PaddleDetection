@@ -1,0 +1,65 @@
+_BASE_: [
+  '../fairmot/fairmot_dla34_30e_1088x608.yml',
+  '../../datasets/mcmot.yml'
+]
+
+
+weights: output/csmot_dla34_s_30e_1088x608_visdrone_lr_0_005/model_final
+save_dir: output/csmot_dla34_s_30e_1088x608_visdrone_lr_0_005
+# pretrain_weights: /paddle/zcd/PaddleClas/dla_star_752/best_model.pdparams
+pretrain_weights: /paddle/zcd/PaddleDetection/best_model.pdparams
+
+FairMOT:
+  detector: CenterNet
+  reid: FairMOTEmbeddingHead
+  loss: FairMOTLoss
+  tracker: JDETracker # multi-class tracker
+
+
+CenterNetHead:
+  head_planes: 256
+  prior_bias: -2.19
+  regress_ltrb: True
+  size_loss: 'EIoULoss'
+  loss_weight: {'heatmap': 1.0, 'size': 1.0, 'offset': 1.0, 'iou': 0.0}
+  add_iou: False
+
+DLA:
+  depth: 34
+  block: StarBasic
+
+# # CenterNetHead:
+# #   regress_ltrb: False
+
+# CenterNetPostProcess:
+#   regress_ltrb: True
+#   max_per_img: 200
+
+# JDETracker:
+#   min_box_area: 0
+#   vertical_ratio: 0 # no need to filter bboxes according to w/h
+#   conf_thres: 0.4
+#   tracked_thresh: 0.4
+#   metric_type: cosine
+
+# LearningRate:
+#   base_lr: 0.0002
+#   schedulers:
+#   - !PiecewiseDecay
+#     gamma: 0.1
+#     milestones: [20,]
+#     use_warmup: False
+
+epoch: 30
+LearningRate:
+  base_lr: 0.005
+  schedulers:
+  - !PiecewiseDecay
+    gamma: 0.1
+    milestones: [10, 20]
+    use_warmup: False
+
+OptimizerBuilder:
+  optimizer:
+    type: Adam
+  regularizer: NULL
